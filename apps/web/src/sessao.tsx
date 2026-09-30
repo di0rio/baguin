@@ -58,7 +58,7 @@ export function Protegido({ children, exigirAvatar = true }: { children: ReactNo
 export function Carregando({ texto = "Carregando..." }: { texto?: string }) {
   return (
     <div className="carregando" role="status">
-      <span className="pulo" />
+      <span className="giro" />
       {texto}
     </div>
   );
