@@ -1,6 +1,8 @@
 import { BALAO_MS, type Direcao, type Pecas } from "@baguin/shared";
 import Phaser from "phaser";
 import { FRAME_A, FRAME_L, QUADROS_POR_DIRECAO, ORDEM_DIRECOES, quadro, renderizarSpritesheet } from "../avatar/renderizar";
+import type { StatusAvatar } from "./indicador";
+import { balao, etiquetaNome, soltarBalao, type Textura, type TexturaBalao } from "./rotulos";
 
 /** Ciclo de caminhada: parado, passo A, parado, passo B. */
 const CICLO = [0, 1, 0, 2];
@@ -9,11 +11,12 @@ const MS_POR_QUADRO = 140;
 const PES = 10;
 /** Topo do sprite, relativo ao centro. */
 const TOPO = PES - FRAME_A;
-const FONTE_NOME = '"Pixelify Sans", ui-monospace, monospace';
-const FONTE_EMOJI = '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
-const BALAO_LARGURA = 110;
-/** Resolução das texturas de texto: alta o bastante para ficar nítida com zoom 2x. */
-const RES_TEXTO = 4;
+/** A etiqueta de nome fica logo acima da cabeça; a pílula ocupa 18px dentro de uma textura de 22px. */
+const ETIQUETA_BASE = TOPO;
+const ETIQUETA_ALTURA_PILULA = 18;
+const BALAO_ENTRADA_MS = 160;
+const BALAO_SAIDA_MS = 120;
+const reduzirMovimento = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 const hash = (s: string) => {
   let h = 5381;
@@ -33,56 +36,36 @@ function garantirTextura(scene: Phaser.Scene, contaId: string, pecasJson: string
   return chave;
 }
 
-function texto(scene: Phaser.Scene, style: Phaser.Types.GameObjects.Text.TextStyle) {
-  return scene.add.text(0, 0, "", style).setResolution(RES_TEXTO);
-}
-
-/** Um Avatar no mundo: sprite + nome (ordenados por y) e indicador + Balão (sempre por cima). */
+/** Um Avatar no mundo: sprite (ordenado por y) e, por cima de tudo, etiqueta de nome + Balão. */
 export class AvatarSprite {
   private corpo: Phaser.GameObjects.Container;
   private topo: Phaser.GameObjects.Container;
   private sprite: Phaser.GameObjects.Sprite;
-  private indicador: Phaser.GameObjects.Text;
-  private balaoBg: Phaser.GameObjects.Graphics;
-  private balaoTexto: Phaser.GameObjects.Text;
+  private etiqueta: Phaser.GameObjects.Image;
+  private balaoImg: Phaser.GameObjects.Image | null = null;
+  private balaoTween: Phaser.Tweens.Tween | null = null;
+  private balaoTexto = "";
+  private balaoChave = "";
   private pecasJson = "";
   private chaveTextura = "";
   private balaoAte = 0;
-  private emojiAtual = "";
+  private icone = "";
+  private status: StatusAvatar = "online";
+  private res: number;
 
   constructor(
     private scene: Phaser.Scene,
     readonly contaId: string,
-    nome: string,
-    ehEu: boolean,
+    private nome: string,
+    private ehEu: boolean,
+    res: number,
   ) {
+    this.res = res;
     this.sprite = scene.add.sprite(0, PES, "__DEFAULT").setOrigin(0.5, 1);
-    const rotulo = texto(scene, {
-      fontFamily: FONTE_NOME,
-      fontSize: "9px",
-      color: ehEu ? "#ffd166" : "#ffffff",
-      stroke: "#1a1424",
-      strokeThickness: 2,
-      padding: { x: 2, y: 2 },
-    })
-      .setText(nome)
-      .setOrigin(0.5, 0)
-      .setPosition(0, PES + 1);
-    this.corpo = scene.add.container(0, 0, [this.sprite, rotulo]);
-
-    this.indicador = texto(scene, { fontFamily: FONTE_EMOJI, fontSize: "11px", padding: { x: 2, y: 2 } }).setOrigin(0.5, 1).setPosition(0, TOPO - 1);
-    this.balaoBg = scene.add.graphics();
-    this.balaoTexto = texto(scene, {
-      fontFamily: FONTE_NOME,
-      fontSize: "8px",
-      color: "#2a1f33",
-      align: "center",
-      padding: { x: 1, y: 1 },
-      wordWrap: { width: BALAO_LARGURA, useAdvancedWrap: true },
-    }).setOrigin(0.5, 1);
-    this.topo = scene.add.container(0, 0, [this.indicador, this.balaoBg, this.balaoTexto]).setDepth(1e6);
-    this.balaoBg.setVisible(false);
-    this.balaoTexto.setVisible(false);
+    this.corpo = scene.add.container(0, 0, [this.sprite]);
+    this.etiqueta = scene.add.image(0, ETIQUETA_BASE, "__DEFAULT").setOrigin(0.5, 1);
+    this.topo = scene.add.container(0, 0, [this.etiqueta]).setDepth(1e6);
+    this.refazerEtiqueta();
   }
 
   definirPecas(pecasJson: string) {
@@ -104,41 +87,104 @@ export class AvatarSprite {
     if (this.balaoAte && agora > this.balaoAte) this.esconderBalao();
   }
 
-  definirIndicador(emoji: string) {
-    if (emoji === this.emojiAtual) return;
-    this.emojiAtual = emoji;
-    this.indicador.setText(emoji);
+  /** Bolinha de status e Indicador de atividade (emoji, "" = nenhum) dentro da pílula do nome. */
+  definirEstado(status: StatusAvatar, emoji: string) {
+    if (status === this.status && emoji === this.icone) return;
+    this.status = status;
+    this.icone = emoji;
+    this.refazerEtiqueta();
+  }
+
+  /** Muda a resolução das texturas de texto (o zoom da câmera mudou). */
+  definirResolucao(res: number) {
+    if (res === this.res) return;
+    this.res = res;
+    this.refazerEtiqueta();
+    if (this.balaoImg) this.aplicarBalao(this.balaoTexto, false);
+  }
+
+  mostrarBalao(texto: string, agora: number) {
+    this.balaoAte = agora + BALAO_MS;
+    this.aplicarBalao(texto, true);
+  }
+
+  private refazerEtiqueta() {
+    const t: Textura = etiquetaNome(this.scene, { nome: this.nome, status: this.status, icone: this.icone, ehEu: this.ehEu, res: this.res });
+    this.etiqueta.setTexture(t.chave).setDisplaySize(t.largura, t.altura);
     this.reposicionarBalao();
   }
 
-  mostrarBalao(textoBalao: string, agora: number) {
-    this.balaoAte = agora + BALAO_MS;
-    this.balaoTexto.setText(textoBalao);
-    this.reposicionarBalao();
-    this.balaoBg.setVisible(true);
-    this.balaoTexto.setVisible(true);
+  /** Novo Balão substitui o anterior; entra com fade + escala 0.96 a partir da cauda. */
+  private aplicarBalao(texto: string, animar: boolean) {
+    this.balaoTween?.stop();
+    this.balaoTween = null;
+    this.descartarBalao();
+    this.balaoTexto = texto;
+    const t: TexturaBalao = balao(this.scene, texto, this.res);
+    this.balaoChave = t.chave;
+    this.balaoImg = this.scene.add
+      .image(0, this.yBalao(), t.chave)
+      .setOrigin(0.5, t.origemY / t.altura)
+      .setDisplaySize(t.largura, t.altura);
+    this.topo.add(this.balaoImg);
+    if (!animar) return;
+    const { scaleX, scaleY } = this.balaoImg;
+    if (reduzirMovimento()) {
+      this.balaoImg.setAlpha(0);
+      this.balaoTween = this.scene.tweens.add({ targets: this.balaoImg, alpha: 1, duration: BALAO_ENTRADA_MS, ease: "Quint.easeOut" });
+      return;
+    }
+    this.balaoImg.setAlpha(0).setScale(scaleX * 0.96, scaleY * 0.96);
+    this.balaoTween = this.scene.tweens.add({
+      targets: this.balaoImg,
+      alpha: 1,
+      scaleX,
+      scaleY,
+      duration: BALAO_ENTRADA_MS,
+      ease: "Quint.easeOut", // ~ cubic-bezier(0.23, 1, 0.32, 1)
+    });
   }
 
   private esconderBalao() {
     this.balaoAte = 0;
-    this.balaoBg.setVisible(false).clear();
-    this.balaoTexto.setVisible(false);
+    const img = this.balaoImg;
+    if (!img) return;
+    const chave = this.balaoChave;
+    this.balaoTween?.stop();
+    this.balaoImg = null;
+    this.balaoChave = "";
+    this.balaoTween = this.scene.tweens.add({
+      targets: img,
+      alpha: 0,
+      duration: BALAO_SAIDA_MS,
+      ease: "Quad.easeOut",
+      onComplete: () => {
+        img.destroy();
+        soltarBalao(this.scene, chave);
+      },
+    });
   }
 
-  /** O Balão fica acima do Indicador quando há um. */
+  private descartarBalao() {
+    if (!this.balaoImg) return;
+    this.balaoImg.destroy();
+    this.balaoImg = null;
+    soltarBalao(this.scene, this.balaoChave);
+    this.balaoChave = "";
+  }
+
+  /** Ponta da cauda do Balão: logo acima da pílula do nome. */
+  private yBalao() {
+    return ETIQUETA_BASE - (ETIQUETA_ALTURA_PILULA + 4) - 2;
+  }
+
   private reposicionarBalao() {
-    if (!this.balaoAte) return;
-    const fundo = TOPO - 4 - (this.emojiAtual ? 12 : 0);
-    const w = this.balaoTexto.width;
-    const h = this.balaoTexto.height;
-    this.balaoTexto.setPosition(0, fundo - 3);
-    this.balaoBg.clear().fillStyle(0xfff8e8, 1).lineStyle(1, 0x2a1f33, 1);
-    this.balaoBg.fillRoundedRect(-w / 2 - 4, fundo - h - 6, w + 8, h + 6, 3);
-    this.balaoBg.strokeRoundedRect(-w / 2 - 4, fundo - h - 6, w + 8, h + 6, 3);
-    this.balaoBg.fillTriangle(-3, fundo, 3, fundo, 0, fundo + 4);
+    this.balaoImg?.setY(this.yBalao());
   }
 
   destruir() {
+    this.balaoTween?.stop();
+    this.descartarBalao();
     this.corpo.destroy();
     this.topo.destroy();
   }
