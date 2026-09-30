@@ -52,6 +52,7 @@ export class AvatarSprite {
   private icone = "";
   private status: StatusAvatar = "online";
   private res: number;
+  private escala = 1;
 
   constructor(
     private scene: Phaser.Scene,
@@ -59,8 +60,10 @@ export class AvatarSprite {
     private nome: string,
     private ehEu: boolean,
     res: number,
+    escala: number,
   ) {
     this.res = res;
+    this.escala = escala;
     this.sprite = scene.add.sprite(0, PES, "__DEFAULT").setOrigin(0.5, 1);
     this.corpo = scene.add.container(0, 0, [this.sprite]);
     this.etiqueta = scene.add.image(0, ETIQUETA_BASE, "__DEFAULT").setOrigin(0.5, 1);
@@ -95,10 +98,11 @@ export class AvatarSprite {
     this.refazerEtiqueta();
   }
 
-  /** Muda a resolução das texturas de texto (o zoom da câmera mudou). */
-  definirResolucao(res: number) {
-    if (res === this.res) return;
+  /** Muda resolução e escala do texto (o zoom da câmera mudou). */
+  definirResolucao(res: number, escala: number) {
+    if (res === this.res && escala === this.escala) return;
     this.res = res;
+    this.escala = escala;
     this.refazerEtiqueta();
     if (this.balaoImg) this.aplicarBalao(this.balaoTexto, false);
   }
@@ -110,7 +114,7 @@ export class AvatarSprite {
 
   private refazerEtiqueta() {
     const t: Textura = etiquetaNome(this.scene, { nome: this.nome, status: this.status, icone: this.icone, ehEu: this.ehEu, res: this.res });
-    this.etiqueta.setTexture(t.chave).setDisplaySize(t.largura, t.altura);
+    this.etiqueta.setTexture(t.chave).setDisplaySize(t.largura * this.escala, t.altura * this.escala);
     this.reposicionarBalao();
   }
 
@@ -125,7 +129,7 @@ export class AvatarSprite {
     this.balaoImg = this.scene.add
       .image(0, this.yBalao(), t.chave)
       .setOrigin(0.5, t.origemY / t.altura)
-      .setDisplaySize(t.largura, t.altura);
+      .setDisplaySize(t.largura * this.escala, t.altura * this.escala);
     this.topo.add(this.balaoImg);
     if (!animar) return;
     const { scaleX, scaleY } = this.balaoImg;
@@ -175,7 +179,7 @@ export class AvatarSprite {
 
   /** Ponta da cauda do Balão: logo acima da pílula do nome. */
   private yBalao() {
-    return ETIQUETA_BASE - (ETIQUETA_ALTURA_PILULA + 4) - 2;
+    return ETIQUETA_BASE - (ETIQUETA_ALTURA_PILULA + 4) * this.escala - 2;
   }
 
   private reposicionarBalao() {
