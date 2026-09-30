@@ -13,7 +13,7 @@ import Phaser from "phaser";
 import { AvatarSprite } from "./AvatarSprite";
 import { indicadorDe, statusDe } from "./indicador";
 import { PROF_CHAO, desenharMapa, objetosDoMapa, portasDoMapa, zonasDoMapa, type Lado } from "./mapa";
-import { pilulaClara, resolucaoTexto } from "./rotulos";
+import { pilulaClara, podarTexturasDeTexto, resolucaoTexto } from "./rotulos";
 import type { Sala } from "./sala";
 import { Teclado } from "./teclado";
 import type { Voz } from "./voz";
@@ -36,6 +36,7 @@ export class LugarScene extends Phaser.Scene {
   private template: Template | null = null;
   private decoracao: Phaser.GameObjects.GameObject[] = [];
   private rotulos: Phaser.GameObjects.GameObject[] = [];
+  private brilhos: Phaser.Tweens.Tween[] = [];
   private res = 2;
   private avatares = new Map<string, Outro>();
   private eu: Eu | null = null;
@@ -103,6 +104,7 @@ export class LugarScene extends Phaser.Scene {
     this.res = res;
     for (const o of this.avatares.values()) o.sprite.definirResolucao(res);
     if (this.template) this.montarRotulos(this.template);
+    podarTexturasDeTexto(this, res);
   }
 
   // ---- montagem do Lugar ----
@@ -118,7 +120,12 @@ export class LugarScene extends Phaser.Scene {
     this.decoracao.push(this.add.image(0, 0, chave).setOrigin(0).setDepth(PROF_CHAO));
     for (const o of objetosDoMapa(lugar.template)) {
       if (!this.textures.exists(o.chave)) this.textures.addCanvas(o.chave, o.canvas);
-      this.decoracao.push(this.add.image(o.x, o.y, o.chave).setOrigin(0).setDepth(o.depth));
+      const img = this.add.image(o.x, o.y, o.chave).setOrigin(0).setDepth(o.depth);
+      this.decoracao.push(img);
+      if (o.chave.includes(":luzinhas:") && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        // as luzinhas piscam de leve
+        this.brilhos.push(this.tweens.add({ targets: img, alpha: 0.7, duration: 1500, yoyo: true, repeat: -1, ease: "Sine.easeInOut" }));
+      }
     }
     this.cameras.main.setBounds(0, 0, larg, alt);
     this.montarRotulos(lugar.template);
@@ -159,6 +166,8 @@ export class LugarScene extends Phaser.Scene {
   }
 
   private limparLugar() {
+    this.brilhos.forEach((t) => t.remove());
+    this.brilhos = [];
     this.rotulos.forEach((o) => o.destroy());
     this.rotulos = [];
     this.decoracao.forEach((o) => o.destroy());
