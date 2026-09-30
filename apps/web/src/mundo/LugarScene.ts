@@ -74,11 +74,17 @@ export class LugarScene extends Phaser.Scene {
         if (this.eu) Object.assign(this.eu, { x: m.x, y: m.y });
       }),
     );
-    this.events.once("shutdown", () => {
+    // `game.destroy(true)` emite DESTROY (não SHUTDOWN); a limpeza é idempotente e vale para os dois
+    let limpo = false;
+    const limpar = () => {
+      if (limpo) return;
+      limpo = true;
       this.scale.off("resize", this.ajustarZoom, this);
       this.descartar.forEach((f) => f());
       this.teclado.destruir();
-    });
+    };
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, limpar);
+    this.events.once(Phaser.Scenes.Events.DESTROY, limpar);
 
     // a conexão pode ter terminado antes da cena existir
     if (s.lugar) {
