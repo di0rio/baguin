@@ -1,12 +1,22 @@
-import { NOME_MAX, type ConfigDto } from "@baguin/shared";
+import { NOME_MAX, type ConfigDto, type Pecas } from "@baguin/shared";
 import { useEffect, useState, type FormEvent } from "react";
 import { Navigate, useSearchParams } from "react-router";
 import { api } from "../api";
+import { AvatarCanvas } from "../avatar/AvatarCanvas";
 import { authClient, caminhoSeguro } from "../auth";
 import { Erro, Marca } from "../componentes";
+import { Discord, Google } from "../ui/marcas";
 import { Carregando, useSessao } from "../sessao";
 
 const NOMES = { discord: "Discord", google: "Google" } as const;
+
+/** Galera de exemplo da vitrine (só decoração). */
+const GALERA: Pecas[] = [
+  { pele: 0, cabelo: { estilo: "longo", cor: 4 }, roupa: { estilo: "moletom", cor: 5 }, calca: 2, acessorio: "oculos" },
+  { pele: 3, cabelo: { estilo: "curto", cor: 1 }, roupa: { estilo: "camiseta", cor: 2 }, calca: 0, acessorio: "fone" },
+  { pele: 2, cabelo: { estilo: "blackpower", cor: 0 }, roupa: { estilo: "regata", cor: 7 }, calca: 3, acessorio: "nenhum" },
+  { pele: 4, cabelo: { estilo: "rabo", cor: 3 }, roupa: { estilo: "camiseta", cor: 9 }, calca: 1, acessorio: "chapeu" },
+];
 
 export function Entrar() {
   const [busca] = useSearchParams();
@@ -46,81 +56,111 @@ export function Entrar() {
 
   return (
     <div className="entrar">
-      <div className="cartao entrar-cartao">
-        <div className="entrar-marca">
-          <Marca />
-          <p>Um cantinho na internet pra encontrar a galera, bater papo e ficar junto.</p>
+      <section className="entrar-hero" aria-hidden={false}>
+        <Marca grande />
+        <div>
+          <h1>Um cantinho na internet pra ficar junto.</h1>
+          <p className="lead">Crie um Espaço, monte seu Avatar e converse com a galera de pertinho, como se estivessem na mesma sala.</p>
         </div>
+        <div className="entrar-palco" aria-hidden>
+          {GALERA.map((p, i) => (
+            <AvatarCanvas key={i} pecas={p} dir="baixo" escala={5} />
+          ))}
+        </div>
+      </section>
 
-        {erroConfig && <Erro>Não consegui falar com o servidor. Ele está rodando?</Erro>}
-
-        {config && config.provedores.length > 0 && (
-          <div className="provedores">
-            {config.provedores.map((p) => (
-              <button
-                key={p}
-                className="primario grande"
-                onClick={() => void authClient.signIn.social({ provider: p, callbackURL: voltar })}
-              >
-                Entrar com {NOMES[p]}
-              </button>
-            ))}
+      <main className="entrar-lado">
+        <div className="entrar-cartao">
+          <div className="entrar-topo">
+            <Marca grande />
           </div>
-        )}
+          <div className="entrar-cabeca">
+            <h2>{modo === "cadastrar" || !config?.devLogin ? "Bem-vindo ao Baguin" : "Que bom te ver de novo"}</h2>
+            <p className="lead">{config?.devLogin && modo === "entrar" ? "Entre para voltar pros seus Espaços." : "Crie sua conta pra montar seu Avatar e entrar num Espaço."}</p>
+          </div>
 
-        {config?.devLogin && (
-          <>
-            {config.provedores.length > 0 && <div className="separador">ou (modo dev)</div>}
-            <div className="abas" role="tablist">
-              {(["cadastrar", "entrar"] as const).map((m) => (
+          {erroConfig && (
+            <>
+              <Erro>Não consegui falar com o servidor. Ele está rodando?</Erro>
+              <button className="secundario cheio" onClick={() => location.reload()}>
+                Tentar de novo
+              </button>
+            </>
+          )}
+
+          {config && config.provedores.length > 0 && (
+            <div className="provedores">
+              {config.provedores.map((p) => (
                 <button
-                  key={m}
-                  role="tab"
-                  aria-selected={modo === m}
-                  className={modo === m ? "aba ativa" : "aba"}
-                  onClick={() => {
-                    setModo(m);
-                    setErro("");
-                  }}
+                  key={p}
+                  className={p === "discord" ? "primario btn-discord grande cheio" : "secundario grande cheio"}
+                  onClick={() => void authClient.signIn.social({ provider: p, callbackURL: voltar })}
                 >
-                  {m === "cadastrar" ? "Cadastrar" : "Entrar"}
+                  {p === "discord" ? <Discord size={20} /> : <Google size={20} />}
+                  Continuar com {NOMES[p]}
                 </button>
               ))}
             </div>
-            <form onSubmit={(e) => void enviar(e)} className="form">
-              {modo === "cadastrar" && (
-                <label>
-                  Nome
-                  <input value={nome} onChange={(e) => setNome(e.target.value)} required maxLength={NOME_MAX} autoComplete="nickname" />
-                </label>
-              )}
-              <label>
-                E-mail
-                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" />
-              </label>
-              <label>
-                Senha
-                <input
-                  type="password"
-                  value={senha}
-                  onChange={(e) => setSenha(e.target.value)}
-                  required
-                  minLength={8}
-                  autoComplete={modo === "cadastrar" ? "new-password" : "current-password"}
-                />
-              </label>
-              {erro && <Erro>{erro}</Erro>}
-              <button className="primario grande" disabled={enviando}>
-                {modo === "cadastrar" ? "Criar conta" : "Entrar"}
-              </button>
-            </form>
-          </>
-        )}
+          )}
 
-        {config && !config.devLogin && config.provedores.length === 0 && (
-          <Erro>Nenhuma forma de login está configurada neste servidor.</Erro>
-        )}
-      </div>
+          {config?.devLogin && (
+            <>
+              {config.provedores.length > 0 && (
+                <div className="separador">
+                  ou entre com e-mail <span className="nota-dev">dev</span>
+                </div>
+              )}
+              <div className="segmentos" role="tablist">
+                {(["cadastrar", "entrar"] as const).map((m) => (
+                  <button
+                    key={m}
+                    role="tab"
+                    type="button"
+                    aria-selected={modo === m}
+                    className="segmento"
+                    onClick={() => {
+                      setModo(m);
+                      setErro("");
+                    }}
+                  >
+                    {m === "cadastrar" ? "Cadastrar" : "Entrar"}
+                  </button>
+                ))}
+              </div>
+              <form onSubmit={(e) => void enviar(e)} className="form">
+                {modo === "cadastrar" && (
+                  <label>
+                    Nome
+                    <input value={nome} onChange={(e) => setNome(e.target.value)} required maxLength={NOME_MAX} autoComplete="nickname" placeholder="Como a galera te chama" />
+                  </label>
+                )}
+                <label>
+                  E-mail
+                  <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" placeholder="voce@exemplo.com" />
+                </label>
+                <label>
+                  Senha
+                  <input
+                    type="password"
+                    value={senha}
+                    onChange={(e) => setSenha(e.target.value)}
+                    required
+                    minLength={8}
+                    autoComplete={modo === "cadastrar" ? "new-password" : "current-password"}
+                    placeholder="Pelo menos 8 caracteres"
+                  />
+                </label>
+                {erro && <Erro>{erro}</Erro>}
+                <button className="primario grande cheio" disabled={enviando}>
+                  {modo === "cadastrar" ? "Criar conta" : "Entrar"}
+                </button>
+              </form>
+            </>
+          )}
+
+          {config && !config.devLogin && config.provedores.length === 0 && <Erro>Nenhuma forma de login está configurada neste servidor.</Erro>}
+        </div>
+      </main>
     </div>
   );
 }

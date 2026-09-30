@@ -2,7 +2,8 @@ import type { EspacoDetalheDto } from "@baguin/shared";
 import { Suspense, lazy, useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
 import { ApiErro, api } from "../api";
-import { Erro, Pagina } from "../componentes";
+import { DoorClosed } from "lucide-react";
+import { Estado, Pagina } from "../componentes";
 import { Carregando } from "../sessao";
 
 // o Phaser é grande: só baixa quando o Espaço abre
@@ -28,8 +29,20 @@ export function Espaco() {
   if (erro) {
     return (
       <Pagina estreita>
-        <Erro>{erro}</Erro>
-        <Link to="/">Voltar pro início</Link>
+        <div className="cartao">
+          <Estado
+            icone={<DoorClosed size={26} strokeWidth={2} aria-hidden />}
+            tom="perigo"
+            titulo="Não deu pra abrir o Espaço"
+            acoes={
+              <Link to="/" className="primario cheio">
+                Voltar pro início
+              </Link>
+            }
+          >
+            {erro}
+          </Estado>
+        </div>
       </Pagina>
     );
   }
