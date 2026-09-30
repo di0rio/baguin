@@ -1,4 +1,5 @@
 import type { LugarDto, Ouvinte } from "@baguin/shared";
+import { criarVozLivekit } from "./vozLivekit";
 
 /**
  * Costura da voz (LiveKit). O mundo chama `criarVoz()`, passa a `FonteMundo` em `iniciar` e
@@ -33,6 +34,8 @@ export type VozEstado = {
   /** Texto curto de explicação quando indisponível (tooltip). */
   motivo?: string;
   microfone: "ligado" | "mudo";
+  /** true enquanto a sala LiveKit do Lugar está conectada (ponto "conectado à voz" no HUD). */
+  conectado: boolean;
   /** contaIds falando agora. */
   falando: ReadonlySet<string>;
 };
@@ -44,21 +47,19 @@ export interface Voz {
   /** Registra ouvinte de mudança de `estado()`; devolve a função de cancelar. */
   assinar(fn: () => void): () => void;
   alternarMicrofone(): void;
+  /** Só para depuração/testes (exposto em `window.__baguin.voz` no dev). */
+  depurar?(): VozDebug;
 }
 
-/** Implementação provisória: voz indisponível. */
+export type VozDebug = {
+  conectado: boolean;
+  sala: string | null;
+  microfonePublicado: boolean;
+  /** Um item por participante remoto com áudio publicado. */
+  remotos: { contaId: string; assinado: boolean; desejado: boolean; alvo: number | null; volume: number | null }[];
+};
+
+/** A voz real (LiveKit) vive em `vozLivekit.ts`. */
 export function criarVoz(): Voz {
-  const estado: VozEstado = {
-    disponivel: false,
-    motivo: "voz indisponível",
-    microfone: "mudo",
-    falando: new Set(),
-  };
-  return {
-    iniciar() {},
-    parar() {},
-    estado: () => estado,
-    assinar: () => () => {},
-    alternarMicrofone() {},
-  };
+  return criarVozLivekit();
 }

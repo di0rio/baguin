@@ -47,7 +47,7 @@ export function Mundo({ detalhe }: { detalhe: EspacoDetalheDto }) {
     void fontesProntas().then(() => {
       if (!cancelado) sala.iniciar();
     });
-    if (import.meta.env.DEV) Object.assign(window, { __baguin: { sala, game } }); // ajuda de depuração
+    if (import.meta.env.DEV) Object.assign(window, { __baguin: { sala, game, voz } }); // ajuda de depuração
     setNucleo({ sala, voz });
 
     return () => {

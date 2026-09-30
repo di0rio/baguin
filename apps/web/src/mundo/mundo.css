@@ -321,3 +321,16 @@ kbd {
     z-index: 2;
   }
 }
+
+.voz-ponto {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: #4ade80;
+  vertical-align: middle;
+}
+.voz-motivo {
+  opacity: 0.75;
+}
