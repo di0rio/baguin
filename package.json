@@ -1,0 +1,9 @@
+{
+  "name": "baguin",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm -r --parallel dev",
+    "typecheck": "pnpm -r typecheck"
+  }
+}
