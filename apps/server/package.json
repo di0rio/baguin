@@ -1,0 +1,34 @@
+{
+  "name": "@baguin/server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --env-file-if-exists=.env src/index.ts",
+    "start": "tsx --env-file-if-exists=.env src/index.ts",
+    "typecheck": "tsc -p .",
+    "test": "vitest run --passWithNoTests",
+    "db:generate": "drizzle-kit generate",
+    "smoke": "tsx --env-file-if-exists=.env scripts/smoke-room.ts"
+  },
+  "dependencies": {
+    "@baguin/shared": "workspace:*",
+    "@colyseus/schema": "^5.0.34",
+    "@electric-sql/pglite": "^0.5.8",
+    "better-auth": "^1.7.6",
+    "colyseus": "^0.18.8",
+    "drizzle-orm": "^0.45.3",
+    "express": "^5.2.1",
+    "jose": "^6.2.12",
+    "livekit-server-sdk": "^2.19.1",
+    "postgres": "^3.4.9",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@colyseus/sdk": "^0.18.4",
+    "@types/express": "^5.0.6",
+    "@types/node": "^24",
+    "drizzle-kit": "^0.31.11",
+    "tsx": "^4.23.15",
+    "vitest": "^5.0.3"
+  }
+}
