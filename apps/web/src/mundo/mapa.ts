@@ -551,8 +551,12 @@ export function desenharMapa(template: Template): HTMLCanvasElement {
   return canvas;
 }
 
+const objetosCache = new Map<Template, ObjetoMapa[]>();
+
 /** Sprites ordenáveis por profundidade: cada Móvel com desenho próprio (e as luzinhas). */
 export function objetosDoMapa(template: Template): ObjetoMapa[] {
+  const guardado = objetosCache.get(template);
+  if (guardado) return guardado;
   const saida: ObjetoMapa[] = [];
   for (const m of TEMPLATES_LUGAR[template].moveis) {
     if (m.tipo === "luzinhas") {
@@ -569,6 +573,7 @@ export function objetosDoMapa(template: Template): ObjetoMapa[] {
       depth: (m.lin + m.alt) * TILE + s.prof,
     });
   }
+  objetosCache.set(template, saida);
   return saida;
 }
 

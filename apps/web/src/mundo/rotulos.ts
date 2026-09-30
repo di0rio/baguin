@@ -244,3 +244,10 @@ export function pilulaClara(scene: Phaser.Scene, texto: string, res: number, opc
     ctx.fillText(t, 8, H / 2 + 3.4);
   });
 }
+
+/** Remove texturas de etiqueta/rótulo feitas para outra resolução (depois que tudo foi refeito na nova). */
+export function podarTexturasDeTexto(scene: Phaser.Scene, res: number) {
+  for (const chave of scene.textures.getTextureKeys()) {
+    if (/^(etq|pil):/.test(chave) && !chave.endsWith(`:${res}`)) scene.textures.remove(chave);
+  }
+}
