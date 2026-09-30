@@ -1,6 +1,7 @@
 import {
   ATIVIDADES,
   BALAO_MAX,
+  NOME_MAX,
   CODIGO_BANIDO,
   CODIGO_DUPLICADO,
   CODIGO_REMOVIDO,
@@ -53,14 +54,19 @@ const moverSchema = z.object({
   dir: z.enum(DIRECOES),
   movendo: z.boolean(),
 });
-const balaoSchema = z.object({ texto: z.string() });
+const balaoSchema = z.object({ texto: z.string().max(BALAO_MAX * 2) });
+const BALAO_COOLDOWN_MS = 500;
 const atividadeSchema = z.object({ atividade: z.enum(ATIVIDADES) });
 const naoPerturbeSchema = z.object({ ativo: z.boolean() });
 
 /** Uma Conta só pode estar em um Lugar por vez, em qualquer room do processo. */
 const ativos = new Map<string, Client>();
 
-type Jogador = { client: Client; orcamento: number; ultimo: number };
+/** A Conta está agora dentro da room deste Lugar? (condição para receber token de voz) */
+export const estaNoLugar = (contaId: string, lugarId: string) =>
+  (ativos.get(contaId)?.auth as Auth | undefined)?.lugarId === lugarId;
+
+type Jogador = { client: Client; orcamento: number; ultimo: number; ultimoBalao: number };
 
 export class LugarRoom extends Room<{ state: LugarEstado }> {
   maxClients = 100;
@@ -96,7 +102,7 @@ export class LugarRoom extends Room<{ state: LugarEstado }> {
 
     return {
       ...ing,
-      nome: u.nome,
+      nome: u.nome.slice(0, NOME_MAX),
       pecas: JSON.stringify(a.pecas),
       silenciadoAte: m.silenciadoAte?.getTime() ?? 0,
     };
@@ -149,7 +155,7 @@ export class LugarRoom extends Room<{ state: LugarEstado }> {
 
     const av = new AvatarEstado();
     av.contaId = auth.contaId;
-    av.nome = auth.nome;
+    av.nome = auth.nome.slice(0, NOME_MAX);
     av.pecas = auth.pecas;
     av.x = x;
     av.y = y;
@@ -163,6 +169,7 @@ export class LugarRoom extends Room<{ state: LugarEstado }> {
       client,
       orcamento: VELOCIDADE * ORCAMENTO_FATOR * ORCAMENTO_TETO_S,
       ultimo: Date.now(),
+      ultimoBalao: 0,
     });
 
     const rows = await db
@@ -262,7 +269,11 @@ export class LugarRoom extends Room<{ state: LugarEstado }> {
     if (!av || !r.success) return;
     const texto = r.data.texto.trim();
     if (texto.length < 1 || texto.length > BALAO_MAX) return;
-    if (av.silenciadoAte > Date.now()) return;
+    const agora = Date.now();
+    if (av.silenciadoAte > agora) return;
+    const jogador = this.jogadores.get(av.contaId)!;
+    if (agora - jogador.ultimoBalao < BALAO_COOLDOWN_MS) return; // flood: descarta o excedente
+    jogador.ultimoBalao = agora;
 
     const payload: BalaoReceberMsg = { contaId: av.contaId, texto };
     const de = this.ouvinte(av);

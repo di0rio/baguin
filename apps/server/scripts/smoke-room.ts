@@ -1,7 +1,7 @@
 // Smoke test ponta a ponta: API + room `lugar`. Requer o servidor rodando (pnpm --filter @baguin/server start).
 // Uso: pnpm --filter @baguin/server smoke
 import { Client, type Room } from "@colyseus/sdk";
-import { NOME_ROOM, TILE, centroTile, type EntrarOpcoes, type PassagemMsg } from "@baguin/shared";
+import { CODIGO_BANIDO, CODIGO_DUPLICADO, CODIGO_REMOVIDO, NOME_ROOM, TILE, centroTile, type EntrarOpcoes, type PassagemMsg } from "@baguin/shared";
 
 const API = process.env.API ?? "http://localhost:2567";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -58,6 +58,13 @@ class Jogador {
     this.room.onLeave((codigo: number) => (this.saiu = codigo));
     await sleep(150);
   }
+  private ultimoBalao = 0;
+  /** envia um balão respeitando o cooldown de 500 ms do servidor */
+  async falar(msg: { texto: string }) {
+    await sleep(Math.max(0, this.ultimoBalao + 520 - Date.now()));
+    this.ultimoBalao = Date.now();
+    this.room.send("balao", msg);
+  }
   ver(tipo: string) {
     return this.recebidas.filter((r) => r.tipo === tipo);
   }
@@ -91,6 +98,20 @@ async function main() {
   const caio = new Sessao("Caio");
   await Promise.all([ana.cadastrar(), bia.cadastrar(), caio.cadastrar()]);
 
+  console.log("\n# 0. nome da Conta é limitado a 32 caracteres; Origin estranha é recusada");
+  const longo = new Sessao("Longo".padEnd(50, "x"));
+  await longo.cadastrar();
+  const euLongo = (await longo.req("GET", "/api/eu")).dados;
+  confere(euLongo.conta.nome.length === 32, `nome de 50 caracteres foi cortado para ${euLongo.conta.nome.length}`);
+  const estranha = await fetch(API + "/api/espacos", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Origin: "https://evil.example", Cookie: ana.cookie },
+    body: JSON.stringify({ nome: "Invasor" }),
+  });
+  confere(estranha.status === 403, `POST com Origin estranha é recusado (${estranha.status})`);
+  const semOrigin = await fetch(API + "/api/espacos", { headers: { Cookie: ana.cookie } });
+  confere(semOrigin.status === 200, "GET (e requisições sem Origin) continuam passando");
+
   const esp = (await ana.req("POST", "/api/espacos", { nome: "Smoke" })).dados;
   const conv = (await ana.req("POST", `/api/espacos/${esp.espaco.id}/convites`, { horas: 1, usosMax: 5 })).dados;
   await bia.req("POST", `/api/convites/${conv.codigo}/aceitar`);
@@ -117,7 +138,7 @@ async function main() {
 
   console.log("\n# 3. balão dentro do Alcance (mesmo ponto, sala = resenha, 7 tiles)");
   a.limpar(); b.limpar();
-  a.room.send("balao", { texto: "  oi Bia!  " });
+  await a.falar({ texto: "  oi Bia!  " });
   await sleep(200);
   console.log("  A recebeu:", resumo(a));
   console.log("  B recebeu:", resumo(b));
@@ -141,7 +162,7 @@ async function main() {
   await b.andar(centroTile(26, 12).x, centroTile(26, 12).y); // ~12 tiles de A
   console.log("  B em", { x: b.eu.x, y: b.eu.y }, "A em", { x: a.eu.x, y: a.eu.y });
   a.limpar(); b.limpar();
-  a.room.send("balao", { texto: "alguém me ouve?" });
+  await a.falar({ texto: "alguém me ouve?" });
   await sleep(250);
   console.log("  A recebeu:", resumo(a));
   console.log("  B recebeu:", resumo(b));
@@ -152,14 +173,14 @@ async function main() {
   b.room.send("naoPerturbe", { ativo: true });
   await sleep(100);
   a.limpar(); b.limpar();
-  a.room.send("balao", { texto: "psiu" });
-  b.room.send("balao", { texto: "não perturbe" });
+  await a.falar({ texto: "psiu" });
+  await b.falar({ texto: "não perturbe" });
   await sleep(250);
   confere(b.ver("balao").length === 1 && b.ver("balao")[0].dados.contaId === bia.contaId && a.ver("balao").length === 1 && a.ver("balao")[0].dados.contaId === ana.contaId, "com NaoPerturbe cada um só vê o próprio balão");
   b.room.send("naoPerturbe", { ativo: false });
   await sleep(100);
   a.limpar(); b.limpar();
-  a.room.send("balao", { texto: "voltou" });
+  await a.falar({ texto: "voltou" });
   await sleep(200);
   confere(b.ver("balao").length === 1, "sem NaoPerturbe B volta a ouvir");
 
@@ -170,17 +191,48 @@ async function main() {
   console.log("  A:", resumo(a));
   console.log("  B:", resumo(b));
   a.limpar(); b.limpar();
-  a.room.send("balao", { texto: "bloqueada?" });
-  b.room.send("balao", { texto: "sim" });
+  await a.falar({ texto: "bloqueada?" });
+  await b.falar({ texto: "sim" });
   await sleep(250);
   confere(b.ver("balao").length === 1 && a.ver("balao").length === 1, "nenhum dos dois vê o balão do outro");
   await bia.req("DELETE", `/api/bloqueios/${ana.contaId}`);
   await sleep(200);
   a.limpar();
   b.limpar();
-  a.room.send("balao", { texto: "desbloqueou" });
+  await a.falar({ texto: "desbloqueou" });
   await sleep(200);
   confere(b.ver("balao").length === 1, "após desbloquear B volta a receber");
+
+  console.log("\n# 7b. Bloqueio mútuo: um desbloqueio não basta");
+  await ana.req("POST", `/api/bloqueios/${bia.contaId}`);
+  await bia.req("POST", `/api/bloqueios/${ana.contaId}`);
+  await sleep(200);
+  await bia.req("DELETE", `/api/bloqueios/${ana.contaId}`);
+  await sleep(200);
+  a.limpar(); b.limpar();
+  await a.falar({ texto: "ainda bloqueados?" });
+  await sleep(200);
+  confere(b.ver("balao").length === 0, "Bia desbloqueou, mas Ana ainda bloqueia: B continua sem receber");
+  await ana.req("DELETE", `/api/bloqueios/${bia.contaId}`);
+  await sleep(200);
+  a.limpar(); b.limpar();
+  await a.falar({ texto: "livres" });
+  await sleep(200);
+  confere(b.ver("balao").length === 1, "com os dois desbloqueados B volta a receber");
+
+  console.log("\n# 7c. Flood de balão: 1 a cada 500 ms, o resto é descartado");
+  a.limpar(); b.limpar();
+  await sleep(520);
+  for (let i = 0; i < 12; i++) {
+    a.room.send("balao", { texto: `spam ${i}` });
+    await sleep(100);
+  }
+  await sleep(150);
+  console.log("  12 balões em ~1,2 s -> B recebeu", b.ver("balao").length);
+  confere(b.ver("balao").length >= 2 && b.ver("balao").length <= 3, "entregues ~1 a cada 500 ms (2 a 3 de 12)");
+  a.room.send("balao", { texto: "x".repeat(500) });
+  await sleep(100);
+  confere(b.ver("balao").every((m) => m.dados.texto.length <= 10), "balão gigante é descartado");
 
   console.log("\n# 8. Silenciar Bia (10 min): balão dela é ignorado, ela recebe `moderacao`");
   b.limpar();
@@ -188,9 +240,11 @@ async function main() {
   await sleep(250);
   console.log("  API:", sil.status, JSON.stringify(sil.dados), "| B:", resumo(b), "| silenciadoAte no estado:", b.eu.silenciadoAte);
   a.limpar(); b.limpar();
-  b.room.send("balao", { texto: "estou silenciada" });
+  await b.falar({ texto: "estou silenciada" });
   await sleep(250);
   confere(a.ver("balao").length === 0 && b.ver("balao").length === 0, "balão de silenciada não chega a ninguém (nem a ela)");
+  const fora = await caio.req("POST", `/api/espacos/${esp.espaco.id}/livekit-token`, { lugarId: lugar("sala") });
+  confere(fora.status === 403, `livekit-token de quem não está na room é recusado (${fora.status})`);
   const cv = await bia.req("POST", `/api/espacos/${esp.espaco.id}/livekit-token`, { lugarId: lugar("sala") });
   const grants = JSON.parse(Buffer.from(cv.dados.token.split(".")[1], "base64url").toString()).video;
   confere(cv.status === 200 && grants.canPublish === false, `livekit-token de silenciada tem canPublish=false (${cv.status})`);
@@ -224,7 +278,7 @@ async function main() {
     await a3.entrar({ ingresso: dup.ingresso, lugarId: dup.lugarId });
     await sleep(300);
     console.log("  conexão antiga (escritório) saiu com código:", a2.saiu);
-    confere(a2.saiu === 4001, "conexão antiga foi derrubada (4001)");
+    confere(a2.saiu === CODIGO_DUPLICADO, `conexão antiga foi derrubada (${CODIGO_DUPLICADO})`);
     a3.room.leave();
   }
 
@@ -235,7 +289,7 @@ async function main() {
   const rem = await ana.req("DELETE", `/api/espacos/${esp.espaco.id}/membros/${caio.contaId}`);
   await sleep(300);
   console.log("  remover:", rem.status, "| Caio recebeu:", resumo(c), "| saiu com código:", c.saiu);
-  confere(c.saiu === 4002 && c.ver("moderacao")[0]?.dados.tipo === "removido", "Caio foi derrubado (4002)");
+  confere(c.saiu === CODIGO_REMOVIDO && c.ver("moderacao")[0]?.dados.tipo === "removido", `Caio foi derrubado (${CODIGO_REMOVIDO})`);
   const ing2 = await caio.req("POST", `/api/espacos/${esp.espaco.id}/ingresso`);
   confere(ing2.status === 403, "Caio removido perde acesso (403)");
   const volta = await caio.req("POST", `/api/convites/${conv.codigo}/aceitar`);
@@ -246,10 +300,14 @@ async function main() {
   await ana.req("POST", `/api/espacos/${esp.espaco.id}/membros/${caio.contaId}/banir`);
   await sleep(300);
   console.log("  banir -> Caio saiu com código:", c2.saiu, "| recebeu:", resumo(c2));
-  confere(c2.saiu === 4003, "Caio banido foi derrubado (4003)");
+  confere(c2.saiu === CODIGO_BANIDO, `Caio banido foi derrubado (${CODIGO_BANIDO})`);
   const volta2 = await caio.req("POST", `/api/convites/${conv.codigo}/aceitar`);
   console.log("  banido tenta o mesmo Convite:", volta2.status, JSON.stringify(volta2.dados));
   confere(volta2.status === 403, "banido não volta pelo Convite (403)");
+  const remBanido = await ana.req("DELETE", `/api/espacos/${esp.espaco.id}/membros/${caio.contaId}`);
+  confere(remBanido.status === 404, `remover Membro banido não desfaz o ban (${remBanido.status})`);
+  const volta3 = await caio.req("POST", `/api/convites/${conv.codigo}/aceitar`);
+  confere(volta3.status === 403, "Caio segue banido após a tentativa de remover (403)");
 
   a.room.leave();
   b.room.leave();

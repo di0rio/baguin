@@ -14,7 +14,7 @@ export async function tokenLivekit(opts: {
   const token = new AccessToken(env.livekit.apiKey, env.livekit.apiSecret, {
     identity: opts.contaId,
     name: opts.nome,
-    ttl: "1h",
+    ttl: "5m", // sem revogação: o LiveKit renova o token dos clientes conectados
   });
   token.addGrant({
     room: livekitSala(opts.espacoId, opts.lugarId),
