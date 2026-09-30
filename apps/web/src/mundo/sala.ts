@@ -13,6 +13,7 @@ import {
   type LugarDto,
   type ModeracaoMsg,
   type MoverMsg,
+  type Pecas,
   type PassagemMsg,
   type Template,
 } from "@baguin/shared";
@@ -30,7 +31,15 @@ const ESPERAS_RECONEXAO = [1000, 2000, 4000, 6000, 8000];
 
 export type Status = "conectando" | "online" | "trocando" | "reconectando" | "outra-aba" | "desconectado" | "expulso";
 
-export type Presente = { contaId: string; nome: string; naoPerturbe: boolean; silenciadoAte: number };
+function lerPecas(json: string): Pecas | null {
+  try {
+    return JSON.parse(json) as Pecas;
+  } catch {
+    return null;
+  }
+}
+
+export type Presente = { contaId: string; nome: string; naoPerturbe: boolean; silenciadoAte: number; pecas: Pecas | null };
 
 /** Snapshot imutável para o HUD (trocado por outro objeto a cada mudança). */
 export type HudEstado = {
@@ -121,6 +130,7 @@ export class Sala extends Emissor<Eventos> {
       nome: a.nome,
       naoPerturbe: a.naoPerturbe,
       silenciadoAte: a.silenciadoAte,
+      pecas: lerPecas(a.pecas),
     }));
     const meu = this.avatares.get(this.contaId);
     return {

@@ -12,7 +12,7 @@ import "./mundo.css";
 /** Espera a fonte dos rótulos (até 1,5 s) para o Phaser não desenhar texto com fonte reserva. */
 const fontesProntas = () =>
   Promise.race([
-    Promise.all([document.fonts.load('8px "Pixelify Sans"'), document.fonts.load("700 12px Nunito")]),
+    Promise.all([document.fonts.load("500 12px Inter"), document.fonts.load("600 12px Inter")]),
     new Promise((r) => setTimeout(r, 1500)),
   ]).catch(() => {});
 
