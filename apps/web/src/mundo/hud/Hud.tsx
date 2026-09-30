@@ -53,11 +53,13 @@ export function Hud({ sala, voz, detalhe: inicial }: { sala: Sala; voz: Voz; det
             className={`secundario ${vozEstado.microfone === "ligado" ? "ativo" : ""}`}
             disabled={!vozEstado.disponivel}
             aria-pressed={vozEstado.microfone === "ligado"}
-            title={vozEstado.disponivel ? "Ligar/desligar o microfone" : (vozEstado.motivo ?? "voz indisponível")}
+            title={vozEstado.motivo ?? "Ligar/desligar o microfone"}
+            data-voz-conectado={vozEstado.conectado}
             onClick={() => voz.alternarMicrofone()}
           >
+            {vozEstado.conectado && <span className="voz-ponto" title="Conectado à voz" />}
             {vozEstado.microfone === "ligado" ? "🎙️ Mic ligado" : "🎙️ Mic mudo"}
-            {!vozEstado.disponivel && <small> · voz indisponível</small>}
+            {vozEstado.motivo && <small className="voz-motivo"> · {vozEstado.motivo}</small>}
           </button>
           <button
             className={`secundario ${hud.naoPerturbe ? "ativo" : ""}`}

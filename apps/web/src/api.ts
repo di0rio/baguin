@@ -6,6 +6,7 @@ import type {
   ConviteDto,
   EuDto,
   IngressoDto,
+  LivekitTokenDto,
   Papel,
   Pecas,
 } from "@baguin/shared";
@@ -52,6 +53,9 @@ export const api = {
     chamar<{ espacoId: string }>("POST", `/api/convites/${encodeURIComponent(codigo)}/aceitar`),
   ingresso: (espacoId: string) =>
     chamar<IngressoDto>("POST", `/api/espacos/${encodeURIComponent(espacoId)}/ingresso`),
+
+  livekitToken: (espacoId: string, lugarId: string) =>
+    chamar<LivekitTokenDto>("POST", `/api/espacos/${encodeURIComponent(espacoId)}/livekit-token`, { lugarId }),
 
   convites: (espacoId: string) =>
     chamar<ConviteDto[]>("GET", `/api/espacos/${encodeURIComponent(espacoId)}/convites`),
