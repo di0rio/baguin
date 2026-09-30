@@ -61,10 +61,12 @@ const escuro = (c: string) => mix(c, "#170d29", 0.6);
 type Tom = { c: string; s: string; l: string; d: string };
 const tom = (c: string): Tom => ({ c, s: sombra(c), l: luz(c), d: escuro(c) });
 
-const TINTA = "#241a2e";
+/** Contorno ameixa-azulado (não preto): cada borda mistura a cor da peça com este tom. */
+const TINTA = "#352757";
 const OLHO = "#231a30";
+const IRIS = "#3f3160";
 const BRANCO = "#f6f3ec";
-const SOLA = "#a9a5b8";
+const SOLA = "#bdb9cf";
 const PALHA = "#e0bb6a";
 
 // ---------------------------------------------------------------- grade de pixels
@@ -100,17 +102,20 @@ function contornar(g: Grade) {
       const i = y * FRAME_L + x;
       if (g[i]) continue;
       let viz: string | null = null;
-      for (const [ax, ay] of [[0, 1], [-1, 0], [1, 0], [0, -1]] as const) {
+      let forca = 0;
+      // luz vem de cima à esquerda: bordas de cima/esquerda mais suaves, de baixo/direita mais firmes
+      for (const [ax, ay, f] of [[0, 1, 0.66], [-1, 0, 0.8], [1, 0, 0.66], [0, -1, 0.84]] as const) {
         const nx = x + ax;
         const ny = y + ay;
         if (nx < 0 || ny < 0 || nx >= FRAME_L || ny >= FRAME_A) continue;
         const v = g[ny * FRAME_L + nx];
         if (v) {
           viz = v;
+          forca = f;
           break;
         }
       }
-      if (viz) out[i] = mix(viz, TINTA, 0.72);
+      if (viz) out[i] = mix(viz, TINTA, forca);
     }
   }
   out.forEach((c, i) => {
@@ -119,7 +124,7 @@ function contornar(g: Grade) {
 }
 
 function sombraNoChao(g: Grade) {
-  const c = "#0000003a";
+  const c = "#3a2f5b40";
   const linhas: [number, number, number][] = [
     [30, 5, 18],
     [31, 7, 16],
@@ -168,9 +173,12 @@ function pernasFrente(g: Grade, { pe, fase, oy }: Ctx) {
     f.r(xi, topo + 1, xi, fundoCalca, pe.calca.s);
     const sy = fundoCalca + 1;
     const sx0 = lado === "E" ? 7 : 12;
+    // tênis: cabedal branco com detalhe na cor da camisa e sola clara
     f.r(sx0, sy, sx0 + 4, sy, BRANCO);
     f.r(sx0, sy + 1, sx0 + 4, sy + 1, SOLA);
     f.p(lado === "E" ? sx0 : sx0 + 4, sy, mix(BRANCO, SOLA, 0.5));
+    f.p(sx0 + 2, sy, pe.roupa.c);
+    f.p(lado === "E" ? sx0 + 1 : sx0 + 3, sy, mix(BRANCO, "#ffffff", 0.6));
   }
 }
 
@@ -188,6 +196,8 @@ function pernasLado(g: Grade, { pe, fase, oy }: Ctx) {
     const topoC = longe ? mix(BRANCO, "#2a1445", 0.2) : BRANCO;
     f.r(x0 - 2, sy, x0 + 2, sy, topoC);
     f.r(x0 - 2, sy + 1, x0 + 2, sy + 1, solaC);
+    f.p(x0 + 1, sy, longe ? mix(pe.roupa.s, "#2a1445", 0.2) : pe.roupa.c); // detalhe na cor da camisa
+    f.p(x0 - 2, sy, longe ? topoC : mix(BRANCO, SOLA, 0.45)); // biqueira
   };
   if (fase === 0) {
     perna(1, false, true);
@@ -219,6 +229,7 @@ function cabecaFrente(t: Caneta, { pe }: Ctx) {
 function rostoFrente(t: Caneta, { pe }: Ctx) {
   for (const x of [8, 14]) {
     t.r(x, 10, x + 1, 12, OLHO);
+    t.r(x, 12, x + 1, 12, IRIS);
     t.p(x, 10, "#f8f5ff"); // brilho
   }
   t.p(7, 13, pe.blush);
@@ -243,6 +254,7 @@ function cabecaLado(t: Caneta, { pe }: Ctx) {
 
 function rostoLado(t: Caneta, { pe }: Ctx) {
   t.r(7, 10, 8, 12, OLHO);
+  t.r(7, 12, 8, 12, IRIS);
   t.p(7, 10, "#f8f5ff");
   t.p(7, 13, pe.blush);
   t.r(6, 14, 6, 14, pe.boca);
@@ -276,6 +288,7 @@ function cupulaFrente(t: Caneta, h: Tom) {
   // luz e sombra
   t.h(3, 8, 11, h.l);
   t.h(4, 7, 8, h.l);
+  t.h(3, 9, 10, mix(h.l, "#ffffff", 0.55));
   t.r(18, 4, 18, 9, h.s);
   t.h(6, 13, 17, h.s);
   t.p(11, 7, h.s);
@@ -377,6 +390,7 @@ function cupulaLado(t: Caneta, h: Tom) {
   t.h(13, 15, 17, h.c);
   t.h(3, 8, 11, h.l);
   t.h(4, 7, 9, h.l);
+  t.h(3, 9, 10, mix(h.l, "#ffffff", 0.55));
   t.r(18, 4, 18, 12, h.s);
   t.h(13, 15, 17, h.s);
   t.h(9, 14, 17, h.s);
@@ -468,6 +482,7 @@ function cabeloCosta(t: Caneta, ctx: Ctx, camada: "atras" | "frente") {
     t.h(fundo, 7, 16, h.c);
     t.h(3, 8, 11, h.l);
     t.h(4, 7, 9, h.l);
+    t.h(3, 9, 10, mix(h.l, "#ffffff", 0.55));
     t.r(18, 4, 18, fundo - 1, h.s);
     t.h(fundo, 7, 16, h.s);
     t.h(fundo - 1, 6, 17, h.c);
@@ -584,6 +599,11 @@ function torsoFrente(t: Caneta, { pe, pecas }: Ctx) {
     t.h(17, 11, 12, pele.c);
     t.h(16, 9, 9, r.l);
     t.h(16, 14, 14, r.l);
+    // dobras do tecido na barriga
+    t.p(12, 20, r.s);
+    t.p(11, 21, r.s);
+    t.p(13, 22, r.s);
+    t.p(9, 21, r.l);
   } else if (estilo === "moletom") {
     // capuz: borda grossa em U em volta do pescoço
     const capuz = mix(r.c, "#ffffff", 0.12);
