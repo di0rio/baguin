@@ -28,6 +28,9 @@ export function fontesProntas(): Promise<void> {
 /** Fator de supersampling do texto: cobre o zoom da câmera e a densidade da tela. */
 export const resolucaoTexto = (zoom: number) => Math.min(6, Math.max(2, Math.ceil(zoom * (window.devicePixelRatio || 1))));
 
+/** Escala do texto no mundo: mantém etiquetas, Balões e rótulos com tamanho de tela estável (~13px) em qualquer zoom. */
+export const escalaTexto = (zoom: number) => Math.min(1, 1.3 / zoom);
+
 export type Textura = { chave: string; largura: number; altura: number };
 
 type Desenho = (ctx: CanvasRenderingContext2D, largura: number, altura: number) => void;
