@@ -1,12 +1,13 @@
 import type { EspacoDto } from "@baguin/shared";
 import { useEffect, useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 import { api } from "../api";
 import { Erro, Pagina } from "../componentes";
 import { Carregando } from "../sessao";
 
 export function Inicio() {
   const nav = useNavigate();
+  const aviso = (useLocation().state as { aviso?: string } | null)?.aviso;
   const [espacos, setEspacos] = useState<EspacoDto[] | null>(null);
   const [nome, setNome] = useState("");
   const [erro, setErro] = useState("");
@@ -33,6 +34,7 @@ export function Inicio() {
   return (
     <Pagina>
       <section>
+        {aviso && <Erro>{aviso}</Erro>}
         <h1>Seus Espaços</h1>
         {erro && <Erro>{erro}</Erro>}
         {!espacos && !erro && <Carregando />}

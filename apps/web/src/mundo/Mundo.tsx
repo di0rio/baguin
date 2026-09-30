@@ -1,38 +1,71 @@
 import type { EspacoDetalheDto } from "@baguin/shared";
-import { Link } from "react-router";
-import { Pagina } from "../componentes";
+import Phaser from "phaser";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router";
+import { useSessao } from "../sessao";
+import { Hud } from "./hud/Hud";
+import { LugarScene } from "./LugarScene";
+import { Sala } from "./sala";
+import { criarVoz, type Voz } from "./voz";
+import "./mundo.css";
 
-/** Placeholder: a parte 2 monta aqui o Phaser + HUD do Espaço. */
+/** Espera a fonte dos rótulos (até 1,5 s) para o Phaser não desenhar texto com fonte reserva. */
+const fontesProntas = () =>
+  Promise.race([
+    Promise.all([document.fonts.load('8px "Pixelify Sans"'), document.fonts.load("700 12px Nunito")]),
+    new Promise((r) => setTimeout(r, 1500)),
+  ]).catch(() => {});
+
+/** O mundo do Espaço: cena Phaser (canvas) + HUD React por cima. */
 export function Mundo({ detalhe }: { detalhe: EspacoDetalheDto }) {
-  // TODO(parte 2): Phaser (Lugar, Avatares), cliente Colyseus (VITE_COLYSEUS_URL), HUD e voz LiveKit.
-  const { espaco, lugares, membros, eu } = detalhe;
+  const { eu } = useSessao();
+  const nav = useNavigate();
+  const palco = useRef<HTMLDivElement>(null);
+  const [nucleo, setNucleo] = useState<{ sala: Sala; voz: Voz } | null>(null);
+  const contaId = eu?.conta.id;
+  const espacoId = detalhe.espaco.id;
+
+  useEffect(() => {
+    if (!contaId || !palco.current) return;
+    const sala = new Sala(espacoId, contaId, detalhe.lugares);
+    const voz = criarVoz();
+    voz.iniciar(sala.fonte());
+    const saiu = sala.on("expulso", (tipo) =>
+      nav("/", { replace: true, state: { aviso: tipo === "banido" ? "Você foi banido do Espaço." : "Você foi removido do Espaço." } }),
+    );
+    const game = new Phaser.Game({
+      type: Phaser.AUTO,
+      parent: palco.current,
+      pixelArt: true,
+      backgroundColor: "#16121e",
+      scale: { mode: Phaser.Scale.RESIZE, width: "100%", height: "100%" },
+      audio: { noAudio: true },
+      disableContextMenu: true,
+      scene: new LugarScene(sala, voz),
+    });
+    let cancelado = false;
+    void fontesProntas().then(() => {
+      if (!cancelado) sala.iniciar();
+    });
+    if (import.meta.env.DEV) Object.assign(window, { __baguin: { sala, game } }); // ajuda de depuração
+    setNucleo({ sala, voz });
+
+    return () => {
+      cancelado = true;
+      saiu();
+      voz.parar();
+      sala.dispose(); // sai da room (e cancela um join ainda em andamento)
+      game.destroy(true);
+      setNucleo(null);
+    };
+    // detalhe.lugares só muda com o Espaço
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contaId, espacoId, nav]);
+
   return (
-    <Pagina>
-      <Link to="/">← Meus Espaços</Link>
-      <h1>{espaco.nome}</h1>
-      <p className="etiqueta">Aqui vai o mundo (em construção). Seu Papel: {eu.papel ?? "Membro"}</p>
-      <div className="grade-2">
-        <section className="cartao">
-          <h2>Lugares</h2>
-          <ul className="simples">
-            {lugares.map((l) => (
-              <li key={l.id}>
-                {l.nome} <span className="etiqueta">({l.template}, {l.ambiente})</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-        <section className="cartao">
-          <h2>Membros ({membros.length})</h2>
-          <ul className="simples">
-            {membros.map((m) => (
-              <li key={m.contaId}>
-                {m.nome} {m.papel && <span className="etiqueta">({m.papel})</span>}
-              </li>
-            ))}
-          </ul>
-        </section>
-      </div>
-    </Pagina>
+    <div className="mundo">
+      <div className="mundo-palco" ref={palco} />
+      {nucleo && <Hud sala={nucleo.sala} voz={nucleo.voz} detalhe={detalhe} />}
+    </div>
   );
 }
