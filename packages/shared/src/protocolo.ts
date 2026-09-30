@@ -5,6 +5,8 @@ export const NOME_ROOM = "lugar";
 export const PORTA_SERVIDOR = 2567;
 export const BALAO_MAX = 200;
 export const BALAO_MS = 6000;
+/** Tamanho máximo do nome de uma Conta (Better Auth / Avatar). */
+export const NOME_MAX = 32;
 
 /**
  * Códigos de saída da room (`client.leave(codigo)`). Ficam fora da faixa 4000-4010 que o Colyseus

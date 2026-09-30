@@ -1,4 +1,4 @@
-import type { ConfigDto } from "@baguin/shared";
+import { NOME_MAX, type ConfigDto } from "@baguin/shared";
 import { useEffect, useState, type FormEvent } from "react";
 import { Navigate, useSearchParams } from "react-router";
 import { api } from "../api";
@@ -91,7 +91,7 @@ export function Entrar() {
               {modo === "cadastrar" && (
                 <label>
                   Nome
-                  <input value={nome} onChange={(e) => setNome(e.target.value)} required maxLength={40} autoComplete="nickname" />
+                  <input value={nome} onChange={(e) => setNome(e.target.value)} required maxLength={NOME_MAX} autoComplete="nickname" />
                 </label>
               )}
               <label>

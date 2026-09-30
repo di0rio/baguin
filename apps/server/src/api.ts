@@ -22,6 +22,7 @@ import { db, schema } from "./db/index.js";
 import { env } from "./env.js";
 import { assinarIngresso } from "./ingresso.js";
 import { derrubarDaVoz, permitirPublicar, tokenLivekit } from "./livekit.js";
+import { estaNoLugar } from "./rooms/LugarRoom.js";
 
 const { user, avatar, espaco, lugar, membro, convite, bloqueio } = schema;
 
@@ -126,6 +127,15 @@ export function montarApi(app: Application) {
   app.use(express.json());
 
   const api = express.Router();
+
+  // CSRF em profundidade (o /api/auth acima tem a verificação do Better Auth): escrita vinda de outra
+  // origem é recusada. Sem Origin (curl, servidor a servidor) passa; o navegador sempre envia em POST.
+  api.use((req, _res, next) => {
+    const seguro = req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS";
+    const origem = req.headers.origin;
+    if (!seguro && origem !== undefined && origem !== env.webOrigin) throw new HttpErro(403, "origem não permitida");
+    next();
+  });
 
   api.get("/config", (_req, res) => {
     const dto: ConfigDto = { provedores: provedoresAtivos(), devLogin: env.devLogin, livekitUrl: env.livekit.url };
@@ -266,14 +276,20 @@ export function montarApi(app: Application) {
         if (m?.banido) throw new HttpErro(403, "você foi banido deste Espaço");
         if (m) return c.espacoId; // já é Membro: idempotente
         if (!ativo(c)) throw new HttpErro(410, "Convite expirado, revogado ou esgotado");
-        // consumo atômico: evita estourar usosMax com aceites simultâneos
+        // aceite simultâneo da mesma Conta: só quem de fato inseriu o Membro consome um uso
+        const inserido = await tx
+          .insert(membro)
+          .values({ espacoId: c.espacoId, contaId: req.conta.id })
+          .onConflictDoNothing()
+          .returning({ contaId: membro.contaId });
+        if (!inserido.length) return c.espacoId;
+        // consumo atômico: evita estourar usosMax com aceites simultâneos (falha desfaz o insert)
         const consumido = await tx
           .update(convite)
           .set({ usos: sql`${convite.usos} + 1` })
           .where(and(eq(convite.codigo, codigo), lt(convite.usos, convite.usosMax)))
           .returning({ codigo: convite.codigo });
         if (!consumido.length) throw new HttpErro(410, "Convite esgotado");
-        await tx.insert(membro).values({ espacoId: c.espacoId, contaId: req.conta.id });
         return c.espacoId;
       });
       res.json({ espacoId });
@@ -310,6 +326,7 @@ export function montarApi(app: Application) {
         .from(lugar)
         .where(and(eq(lugar.id, lugarId), eq(lugar.espacoId, id)));
       if (!l) throw new HttpErro(404, "Lugar não encontrado");
+      if (!estaNoLugar(req.conta.id, lugarId)) throw new HttpErro(403, "entre no Lugar antes de usar a voz");
       const dto: LivekitTokenDto = {
         url: env.livekit.url,
         token: await tokenLivekit({
@@ -368,7 +385,7 @@ export function montarApi(app: Application) {
             await permitirPublicar(id, ids, alvo.contaId, true);
           }
         }, minutos * 60_000).unref();
-      });
+      }).catch(console.error);
       res.json({ silenciadoAte: ate.toISOString() });
     }),
   );
@@ -379,10 +396,11 @@ export function montarApi(app: Application) {
       const id = idParam(req.params.id);
       const ator = await exigirModeracao(id, req.conta.id);
       const alvo = await alvoDe(id, String(req.params.contaId));
+      if (alvo.banido) throw new HttpErro(404, "Membro não encontrado"); // remover não pode desfazer um ban
       exigirHierarquia(ator.papel, alvo.papel);
       await db.delete(membro).where(and(eq(membro.espacoId, id), eq(membro.contaId, alvo.contaId)));
       bus.emit("moderacao", { tipo: "removido", espacoId: id, contaId: alvo.contaId });
-      void lugarIdsDe(id).then((ids) => derrubarDaVoz(id, ids, alvo.contaId));
+      void lugarIdsDe(id).then((ids) => derrubarDaVoz(id, ids, alvo.contaId)).catch(console.error);
       res.status(204).end();
     }),
   );
@@ -399,7 +417,7 @@ export function montarApi(app: Application) {
         .set({ banido: true, papel: null })
         .where(and(eq(membro.espacoId, id), eq(membro.contaId, alvo.contaId)));
       bus.emit("moderacao", { tipo: "banido", espacoId: id, contaId: alvo.contaId });
-      void lugarIdsDe(id).then((ids) => derrubarDaVoz(id, ids, alvo.contaId));
+      void lugarIdsDe(id).then((ids) => derrubarDaVoz(id, ids, alvo.contaId)).catch(console.error);
       res.status(204).end();
     }),
   );
@@ -432,7 +450,12 @@ export function montarApi(app: Application) {
     logado(async (req, res) => {
       const alvo = String(req.params.contaId);
       await db.delete(bloqueio).where(and(eq(bloqueio.contaId, req.conta.id), eq(bloqueio.bloqueadoId, alvo)));
-      bus.emit("bloqueio", { contaId: req.conta.id, bloqueadoId: alvo, ativo: false });
+      // efeito simétrico: se o outro também bloqueia, o par continua bloqueado
+      const [inverso] = await db
+        .select({ contaId: bloqueio.contaId })
+        .from(bloqueio)
+        .where(and(eq(bloqueio.contaId, alvo), eq(bloqueio.bloqueadoId, req.conta.id)));
+      if (!inverso) bus.emit("bloqueio", { contaId: req.conta.id, bloqueadoId: alvo, ativo: false });
       res.status(204).end();
     }),
   );

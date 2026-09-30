@@ -14,3 +14,4 @@ export const bus = new EventEmitter<{
   moderacao: [EventoModeracao];
   bloqueio: [EventoBloqueio];
 }>();
+bus.setMaxListeners(0); // uma room viva escuta cada evento; o número de rooms não é limitado
