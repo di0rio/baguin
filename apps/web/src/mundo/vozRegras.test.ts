@@ -9,7 +9,7 @@ import {
   suavizar,
 } from "./vozRegras";
 
-const lugar = { template: "sala", ambiente: "resenha" } as const; // Alcance 7 tiles, Zona "a" nas linhas 6-7
+const lugar = { template: "sala", ambiente: "resenha" } as const; // Alcance 7 tiles, Zona "a" nas linhas 5-9, colunas 8-19
 const av = (contaId: string, x: number, y: number, naoPerturbe = false) => ({ contaId, x, y, naoPerturbe });
 const nenhum = new Set<string>();
 const eu = av("eu", 5 * TILE, 12 * TILE);
@@ -26,7 +26,7 @@ describe("alvosDeVoz", () => {
   });
   it("Zona isola: quem está na Zona não ouve quem está fora, e dentro o volume é cheio", () => {
     const naZona = av("z", 10 * TILE, 6 * TILE);
-    expect(alvosDeVoz(av("eu", 10 * TILE, 8 * TILE), [naZona], lugar, nenhum).size).toBe(0);
+    expect(alvosDeVoz(av("eu", 10 * TILE, 11 * TILE), [naZona], lugar, nenhum).size).toBe(0);
     expect(alvosDeVoz(av("eu", 12 * TILE, 6 * TILE), [naZona], lugar, nenhum).get("z")).toBe(1);
   });
   it("Não perturbe (meu ou do outro) e Bloqueio zeram", () => {

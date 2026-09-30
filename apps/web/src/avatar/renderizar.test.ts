@@ -42,4 +42,17 @@ describe("renderizador de Avatar", () => {
     for (let y = 0; y < FRAME_A; y++)
       for (let x = 0; x < FRAME_L; x++) expect(Boolean(d[y * FRAME_L + x])).toBe(Boolean(e[y * FRAME_L + (FRAME_L - 1 - x)]));
   });
+
+  it("o contorno é ameixa-azulado suave, nunca preto", () => {
+    for (const dir of ORDEM_DIRECOES) {
+      const com = desenharQuadro(PECAS_PADRAO, dir, 0);
+      const sem = desenharQuadro(PECAS_PADRAO, dir, 0, false);
+      com.forEach((c, i) => {
+        if (!c || sem[i] || c.length > 7) return; // só pixels de contorno (sombra no chão é translúcida)
+        const [r, g, b] = [1, 3, 5].map((k) => parseInt(c.slice(k, k + 2), 16));
+        expect(Math.max(r, g, b), `contorno ${c}`).toBeGreaterThanOrEqual(0x40);
+        expect(b, `contorno ${c}`).toBeGreaterThanOrEqual(0x3a); // sempre com fundo azul-arroxeado
+      });
+    }
+  });
 });
