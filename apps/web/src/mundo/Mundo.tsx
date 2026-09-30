@@ -6,15 +6,9 @@ import { useSessao } from "../sessao";
 import { Hud } from "./hud/Hud";
 import { LugarScene } from "./LugarScene";
 import { Sala } from "./sala";
+import { fontesProntas } from "./rotulos";
 import { criarVoz, type Voz } from "./voz";
 import "./mundo.css";
-
-/** Espera a fonte dos rótulos (até 1,5 s) para o Phaser não desenhar texto com fonte reserva. */
-const fontesProntas = () =>
-  Promise.race([
-    Promise.all([document.fonts.load("500 12px Inter"), document.fonts.load("600 12px Inter")]),
-    new Promise((r) => setTimeout(r, 1500)),
-  ]).catch(() => {});
 
 /** O mundo do Espaço: cena Phaser (canvas) + HUD React por cima. */
 export function Mundo({ detalhe }: { detalhe: EspacoDetalheDto }) {

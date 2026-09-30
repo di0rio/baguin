@@ -11,8 +11,9 @@ import {
 } from "@baguin/shared";
 import Phaser from "phaser";
 import { AvatarSprite } from "./AvatarSprite";
-import { indicadorDe } from "./indicador";
-import { desenharMapa, portasDoMapa } from "./mapa";
+import { indicadorDe, statusDe } from "./indicador";
+import { PROF_CHAO, desenharMapa, objetosDoMapa, portasDoMapa, zonasDoMapa, type Lado } from "./mapa";
+import { pilulaClara, podarTexturasDeTexto, resolucaoTexto } from "./rotulos";
 import type { Sala } from "./sala";
 import { Teclado } from "./teclado";
 import type { Voz } from "./voz";
@@ -22,7 +23,6 @@ const FADE_SAIDA_MS = 180;
 const FADE_ENTRADA_MS = 250;
 const SUAVIZACAO_OUTROS = 14; // maior = segue o servidor mais de perto
 const SNAP_PX = 200;
-const FONTE = '"Pixelify Sans", ui-monospace, monospace';
 
 type Outro = { sprite: AvatarSprite; av: AvatarEstado; x: number; y: number };
 type Eu = { x: number; y: number; dir: Direcao; movendo: boolean };
@@ -35,6 +35,9 @@ export class LugarScene extends Phaser.Scene {
   private teclado!: Teclado;
   private template: Template | null = null;
   private decoracao: Phaser.GameObjects.GameObject[] = [];
+  private rotulos: Phaser.GameObjects.GameObject[] = [];
+  private brilhos: Phaser.Tweens.Tween[] = [];
+  private res = 2;
   private avatares = new Map<string, Outro>();
   private eu: Eu | null = null;
   private euSprite: AvatarSprite | null = null;
@@ -94,7 +97,14 @@ export class LugarScene extends Phaser.Scene {
   }
 
   private ajustarZoom() {
-    this.cameras.main.setZoom(zoomPara(this.scale.width, this.scale.height));
+    const zoom = zoomPara(this.scale.width, this.scale.height);
+    this.cameras.main.setZoom(zoom);
+    const res = resolucaoTexto(zoom);
+    if (res === this.res) return;
+    this.res = res;
+    for (const o of this.avatares.values()) o.sprite.definirResolucao(res);
+    if (this.template) this.montarRotulos(this.template);
+    podarTexturasDeTexto(this, res);
   }
 
   // ---- montagem do Lugar ----
@@ -107,32 +117,18 @@ export class LugarScene extends Phaser.Scene {
     if (!this.textures.exists(chave)) this.textures.addCanvas(chave, desenharMapa(lugar.template));
     const larg = modelo.mapa[0].length * TILE;
     const alt = modelo.mapa.length * TILE;
-    this.decoracao.push(this.add.image(0, 0, chave).setOrigin(0).setDepth(-1));
-    this.cameras.main.setBounds(0, 0, larg, alt);
-
-    const nomeDe = (destino: Template) => this.sala.nomeDoLugar(destino);
-    for (const p of portasDoMapa(lugar.template, nomeDe)) {
-      const cx = p.col * TILE + TILE / 2;
-      const cy = p.lin * TILE + TILE / 2;
-      const [x, y, ox, oy] =
-        p.lado === "baixo" ? [cx, cy + TILE / 2 + 3, 0.5, 0]
-        : p.lado === "cima" ? [cx, cy - TILE / 2 - 3, 0.5, 1]
-        : p.lado === "direita" ? [cx + TILE / 2 + 3, cy, 0, 0.5]
-        : [cx - TILE / 2 - 3, cy, 1, 0.5];
-      this.decoracao.push(
-        this.add
-          .text(x, y, `→ ${p.texto}`, {
-            fontFamily: FONTE,
-            fontSize: "8px",
-            color: "#ffe9b0",
-            backgroundColor: "#1a1424cc",
-            padding: { x: 3, y: 1 },
-          })
-          .setResolution(4)
-          .setOrigin(ox, oy)
-          .setDepth(0),
-      );
+    this.decoracao.push(this.add.image(0, 0, chave).setOrigin(0).setDepth(PROF_CHAO));
+    for (const o of objetosDoMapa(lugar.template)) {
+      if (!this.textures.exists(o.chave)) this.textures.addCanvas(o.chave, o.canvas);
+      const img = this.add.image(o.x, o.y, o.chave).setOrigin(0).setDepth(o.depth);
+      this.decoracao.push(img);
+      if (o.chave.includes(":luzinhas:") && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        // as luzinhas piscam de leve
+        this.brilhos.push(this.tweens.add({ targets: img, alpha: 0.7, duration: 1500, yoyo: true, repeat: -1, ease: "Sine.easeInOut" }));
+      }
     }
+    this.cameras.main.setBounds(0, 0, larg, alt);
+    this.montarRotulos(lugar.template);
 
     this.cameras.main.fadeIn(FADE_ENTRADA_MS, 22, 18, 30);
     this.ativo = true;
@@ -141,7 +137,39 @@ export class LugarScene extends Phaser.Scene {
     this.enviouParado = true;
   }
 
+  /** Rótulos de porta (na parede, ao lado dela) e de Zona (sobre o chão); refeitos quando a resolução do texto muda. */
+  private montarRotulos(template: Template) {
+    this.rotulos.forEach((o) => o.destroy());
+    this.rotulos = [];
+    const modelo = TEMPLATES_LUGAR[template];
+    const SETA: Record<Lado, string> = { baixo: "↑", cima: "↓", direita: "←", esquerda: "→" };
+    const nomeDe = (destino: Template) => this.sala.nomeDoLugar(destino);
+    for (const p of portasDoMapa(template, nomeDe)) {
+      const t = pilulaClara(this, `${SETA[p.lado]} ${p.texto}`, this.res, { forte: true });
+      const x0 = p.col * TILE;
+      const y0 = p.lin * TILE;
+      const [x, y, ox] =
+        p.lado === "baixo" ? [x0 + TILE + 3, y0 + 14, 0]
+        : p.lado === "cima" ? [x0 + TILE + 3, y0 + 16, 0]
+        : p.lado === "direita" ? [x0 + 3, y0 - 9, 0]
+        : [x0 + TILE - 3, y0 - 9, 1];
+      this.rotulos.push(this.add.image(x, y, t.chave).setOrigin(ox, 0.5).setDisplaySize(t.largura, t.altura).setDepth(PROF_CHAO + 5));
+    }
+    for (const z of zonasDoMapa(template)) {
+      const t = pilulaClara(this, z.nome, this.res);
+      const cx = Math.round(((z.col0 + z.col1 + 1) * TILE) / 2);
+      const centro = Math.floor((z.col0 + z.col1) / 2);
+      const livreAcima = [centro, centro + 1].every((c) => modelo.mapa[z.lin0 - 1]?.[c] === ".");
+      const y = livreAcima ? z.lin0 * TILE - 10 : z.lin0 * TILE + 11;
+      this.rotulos.push(this.add.image(cx, y, t.chave).setOrigin(0.5).setDisplaySize(t.largura, t.altura).setDepth(PROF_CHAO + 5));
+    }
+  }
+
   private limparLugar() {
+    this.brilhos.forEach((t) => t.remove());
+    this.brilhos = [];
+    this.rotulos.forEach((o) => o.destroy());
+    this.rotulos = [];
     this.decoracao.forEach((o) => o.destroy());
     this.decoracao = [];
     for (const o of this.avatares.values()) o.sprite.destruir();
@@ -156,7 +184,7 @@ export class LugarScene extends Phaser.Scene {
   private adicionar(av: AvatarEstado) {
     this.avatares.get(av.contaId)?.sprite.destruir();
     const ehEu = av.contaId === this.sala.contaId;
-    const sprite = new AvatarSprite(this, av.contaId, av.nome, ehEu);
+    const sprite = new AvatarSprite(this, av.contaId, av.nome, ehEu, this.res);
     sprite.definirPecas(av.pecas);
     this.avatares.set(av.contaId, { sprite, av, x: av.x, y: av.y });
     if (ehEu) {
@@ -191,7 +219,7 @@ export class LugarScene extends Phaser.Scene {
     const k = 1 - Math.exp(-dt * SUAVIZACAO_OUTROS);
     for (const [id, o] of this.avatares) {
       o.sprite.definirPecas(o.av.pecas);
-      o.sprite.definirIndicador(indicadorDe(o.av, falando.has(id), agora));
+      o.sprite.definirEstado(statusDe(o.av), indicadorDe(o.av, falando.has(id), agora));
       if (id === this.sala.contaId && this.eu) {
         o.sprite.atualizar(this.eu.x, this.eu.y, this.eu.dir, this.eu.movendo, tempo);
         continue;
