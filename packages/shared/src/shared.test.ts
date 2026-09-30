@@ -3,10 +3,12 @@ import {
   TEMPLATES,
   TEMPLATES_LUGAR,
   TILE,
+  TIPOS_PAREDE,
   alcancePx,
   bloqueado,
   centroTile,
   chaveBloqueio,
+  movelSolido,
   pecasSchema,
   PECAS_PADRAO,
   podemSeOuvir,
@@ -93,10 +95,61 @@ describe("integridade dos mapas", () => {
   }
 });
 
+describe("Móveis", () => {
+  for (const t of TEMPLATES) {
+    const { mapa, moveis } = TEMPLATES_LUGAR[t];
+    const lins = mapa.length;
+    const cols = mapa[0].length;
+
+    it(`${t}: os 'M' do mapa são exatamente as pegadas dos Móveis sólidos`, () => {
+      const esperado = new Set<string>();
+      for (const m of moveis.filter(movelSolido))
+        for (let l = m.lin; l < m.lin + m.alt; l++) for (let c = m.col; c < m.col + m.larg; c++) esperado.add(`${c},${l}`);
+      const real = new Set<string>();
+      mapa.forEach((linha, l) => [...linha].forEach((ch, c) => ch === "M" && real.add(`${c},${l}`)));
+      expect([...real].sort()).toEqual([...esperado].sort());
+    });
+
+    it(`${t}: Móveis sólidos não se sobrepõem e ficam dentro do chão`, () => {
+      const ocupado = new Set<string>();
+      for (const m of moveis.filter(movelSolido)) {
+        for (let l = m.lin; l < m.lin + m.alt; l++)
+          for (let c = m.col; c < m.col + m.larg; c++) {
+            const k = `${c},${l}`;
+            expect(ocupado.has(k), `${m.tipo} sobrepõe em ${k}`).toBe(false);
+            ocupado.add(k);
+            expect(c > 0 && l > 0 && c < cols - 1 && l < lins - 1, `${m.tipo} fora do chão em ${k}`).toBe(true);
+          }
+      }
+    });
+
+    it(`${t}: decoração de parede fica sobre parede; o resto, sobre chão`, () => {
+      for (const m of moveis.filter((x) => !movelSolido(x))) {
+        if (m.tipo === "luzinhas") continue;
+        for (let c = m.col; c < m.col + m.larg; c++)
+          for (let l = m.lin; l < m.lin + m.alt; l++) {
+            const ch = mapa[l][c];
+            if (TIPOS_PAREDE.has(m.tipo)) expect(ch, `${m.tipo} em ${c},${l}`).toBe("#");
+            else expect(ch !== "#" && !(ch >= "1" && ch <= "9"), `${m.tipo} em ${c},${l}`).toBe(true);
+          }
+      }
+    });
+
+    it(`${t}: nenhum Móvel sólido cobre a chegada, o spawn ou a frente de uma porta`, () => {
+      const { spawn } = TEMPLATES_LUGAR[t];
+      expect(mapa[spawn.lin][spawn.col]).not.toBe("M");
+      for (const p of Object.values(TEMPLATES_LUGAR)) {
+        for (const porta of Object.values(p.portas))
+          if (porta.destino === t) expect(mapa[porta.chegada.lin][porta.chegada.col]).not.toBe("M");
+      }
+    });
+  }
+});
+
 describe("bloqueio e portas", () => {
   it("paredes e Móveis bloqueiam; chão e porta não; fora do mapa bloqueia", () => {
     expect(bloqueado("sala", 0.5 * TILE, 0.5 * TILE)).toBe(true);
-    expect(bloqueado("sala", 3.5 * TILE, 2.5 * TILE)).toBe(true);
+    expect(bloqueado("sala", 3.5 * TILE, 1.5 * TILE)).toBe(true);
     expect(bloqueado("sala", 10.5 * TILE, 10.5 * TILE)).toBe(false);
     const p = centroTile(14, 0);
     expect(bloqueado("sala", p.x, p.y)).toBe(false);
@@ -106,8 +159,8 @@ describe("bloqueio e portas", () => {
 
   it("caixa de colisão pega tile vizinho", () => {
     // encostado na parede esquerda: centro no tile 1 mas caixa invade o tile 0
-    expect(bloqueado("sala", TILE + 5, 5.5 * TILE)).toBe(true);
-    expect(bloqueado("sala", TILE + 11, 5.5 * TILE)).toBe(false);
+    expect(bloqueado("sala", TILE + 5, 6.5 * TILE)).toBe(true);
+    expect(bloqueado("sala", TILE + 11, 6.5 * TILE)).toBe(false);
   });
 
   it("portaEm acha a porta e o destino", () => {
