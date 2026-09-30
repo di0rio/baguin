@@ -1,10 +1,12 @@
 import type { EspacoDetalheDto } from "@baguin/shared";
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
 import { ApiErro, api } from "../api";
 import { Erro, Pagina } from "../componentes";
-import { Mundo } from "../mundo/Mundo";
 import { Carregando } from "../sessao";
+
+// o Phaser é grande: só baixa quando o Espaço abre
+const Mundo = lazy(() => import("../mundo/Mundo").then((m) => ({ default: m.Mundo })));
 
 export function Espaco() {
   const { espacoId = "" } = useParams();
@@ -32,5 +34,9 @@ export function Espaco() {
     );
   }
   if (!detalhe) return <Carregando texto="Abrindo o Espaço..." />;
-  return <Mundo detalhe={detalhe} />;
+  return (
+    <Suspense fallback={<Carregando texto="Abrindo o Espaço..." />}>
+      <Mundo detalhe={detalhe} />
+    </Suspense>
+  );
 }

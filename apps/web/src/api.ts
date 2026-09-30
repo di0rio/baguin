@@ -3,7 +3,10 @@ import type {
   ConviteInfoDto,
   EspacoDetalheDto,
   EspacoDto,
+  ConviteDto,
   EuDto,
+  IngressoDto,
+  Papel,
   Pecas,
 } from "@baguin/shared";
 
@@ -47,4 +50,27 @@ export const api = {
   convite: (codigo: string) => chamar<ConviteInfoDto>("GET", `/api/convites/${encodeURIComponent(codigo)}`),
   aceitarConvite: (codigo: string) =>
     chamar<{ espacoId: string }>("POST", `/api/convites/${encodeURIComponent(codigo)}/aceitar`),
+  ingresso: (espacoId: string) =>
+    chamar<IngressoDto>("POST", `/api/espacos/${encodeURIComponent(espacoId)}/ingresso`),
+
+  convites: (espacoId: string) =>
+    chamar<ConviteDto[]>("GET", `/api/espacos/${encodeURIComponent(espacoId)}/convites`),
+  criarConvite: (espacoId: string, horas: number, usosMax: number) =>
+    chamar<ConviteDto>("POST", `/api/espacos/${encodeURIComponent(espacoId)}/convites`, { horas, usosMax }),
+  revogarConvite: (codigo: string) => chamar<void>("DELETE", `/api/convites/${encodeURIComponent(codigo)}`),
+
+  bloqueios: () => chamar<{ contaIds: string[] }>("GET", "/api/bloqueios"),
+  bloquear: (contaId: string) => chamar<void>("POST", `/api/bloqueios/${encodeURIComponent(contaId)}`),
+  desbloquear: (contaId: string) => chamar<void>("DELETE", `/api/bloqueios/${encodeURIComponent(contaId)}`),
+
+  // moderação
+  definirPapel: (espacoId: string, contaId: string, papel: Exclude<Papel, "dono">) =>
+    chamar<void>("POST", `${membroUrl(espacoId, contaId)}/papel`, { papel }),
+  silenciar: (espacoId: string, contaId: string, minutos: number) =>
+    chamar<{ silenciadoAte: string }>("POST", `${membroUrl(espacoId, contaId)}/silenciar`, { minutos }),
+  remover: (espacoId: string, contaId: string) => chamar<void>("DELETE", membroUrl(espacoId, contaId)),
+  banir: (espacoId: string, contaId: string) => chamar<void>("POST", `${membroUrl(espacoId, contaId)}/banir`),
 };
+
+const membroUrl = (espacoId: string, contaId: string) =>
+  `/api/espacos/${encodeURIComponent(espacoId)}/membros/${encodeURIComponent(contaId)}`;
