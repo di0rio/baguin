@@ -1,6 +1,9 @@
 import {
   ATIVIDADES,
   BALAO_MAX,
+  CODIGO_BANIDO,
+  CODIGO_DUPLICADO,
+  CODIGO_REMOVIDO,
   DIRECOES,
   TEMPLATES_LUGAR,
   VELOCIDADE,
@@ -39,9 +42,6 @@ type Auth = {
   silenciadoAte: number;
 };
 
-export const CODIGO_DUPLICADO = 4001;
-export const CODIGO_REMOVIDO = 4002;
-export const CODIGO_BANIDO = 4003;
 
 const ORCAMENTO_FATOR = 1.2;
 const ORCAMENTO_TETO_S = 0.5;
