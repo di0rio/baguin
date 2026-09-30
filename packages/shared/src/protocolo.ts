@@ -6,6 +6,14 @@ export const PORTA_SERVIDOR = 2567;
 export const BALAO_MAX = 200;
 export const BALAO_MS = 6000;
 
+/**
+ * Códigos de saída da room (`client.leave(codigo)`). Ficam fora da faixa 4000-4010 que o Colyseus
+ * reserva (4001 = servidor desligando, 4002 = erro, 4003 = falha ao reconectar).
+ */
+export const CODIGO_DUPLICADO = 4101;
+export const CODIGO_REMOVIDO = 4102;
+export const CODIGO_BANIDO = 4103;
+
 export const DIRECOES = ["cima", "baixo", "esquerda", "direita"] as const;
 export type Direcao = (typeof DIRECOES)[number];
 export const ATIVIDADES = ["nenhuma", "digitando", "ausente"] as const;
@@ -61,6 +69,8 @@ export type AvatarEstado = {
   movendo: boolean;
   atividade: Atividade;
   naoPerturbe: boolean;
+  /** epoch ms; 0 = não silenciado */
+  silenciadoAte: number;
 };
 
 // ---- API DTOs ----
