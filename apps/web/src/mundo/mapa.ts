@@ -1,4 +1,4 @@
-import { TEMPLATES_LUGAR, TILE, TIPOS_PAREDE, type Movel, type Template } from "@baguin/shared";
+import { TEMPLATES_LUGAR, TILE, TIPOS_PAREDE, baseSolida, movelSolido, type Movel, type Template } from "@baguin/shared";
 import { desenharMovel } from "./moveis";
 import { Pena, aleatorio, clarear, criarCanvas, escurecer, hashTexto, mix } from "./pixel";
 
@@ -570,7 +570,8 @@ export function objetosDoMapa(template: Template): ObjetoMapa[] {
       canvas: s.canvas,
       x: m.col * TILE + s.dx,
       y: m.lin * TILE + s.dy,
-      depth: (m.lin + m.alt) * TILE + s.prof,
+      // profundidade pela base: o Avatar (pela sola) passa atrás de quem está mais abaixo
+      depth: (movelSolido(m) ? baseSolida(m).y + baseSolida(m).alt : (m.lin + m.alt) * TILE) + s.prof,
     });
   }
   objetosCache.set(template, saida);

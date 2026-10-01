@@ -26,7 +26,14 @@ export type Movel = {
   alt: number;
   /** Variação visual (cor, estilo); significado por tipo, só o web interpreta. */
   variante?: string;
+  /** Recorte da base sólida, em px a partir de cada borda da pegada; sobrescreve `RECORTE_SOLIDO` do tipo. */
+  recorte?: Recorte;
 };
+
+/** Folga em px dentro da pegada: [esquerda, cima, direita, baixo]. */
+export type Recorte = readonly [esq: number, cima: number, dir: number, baixo: number];
+/** Retângulo em px do Lugar (coordenadas de mundo). */
+export type Rect = { x: number; y: number; larg: number; alt: number };
 
 /** Móveis que o Avatar atravessa: tapetes, chão, cadeiras, decoração de parede e luzinhas. */
 export const NAO_SOLIDOS: ReadonlySet<TipoMovel> = new Set<TipoMovel>([
@@ -37,6 +44,47 @@ export const TIPOS_PAREDE: ReadonlySet<TipoMovel> = new Set<TipoMovel>(["janela"
 
 export const movelSolido = (m: Movel) => !NAO_SOLIDOS.has(m.tipo);
 
+/**
+ * Na visão 3/4 o que bloqueia é o contato do Móvel com o chão (a base), não o desenho inteiro: o
+ * Avatar anda atrás da parte alta (encosto de sofá, copa de árvore, topo de estante). A chave é
+ * `tipo:variante` ou só `tipo`; sem entrada vale `RECORTE_PADRAO`. Os valores acompanham o desenho em
+ * `web/mundo/moveis.ts` (medidos no bounding box opaco de cada sprite): o desenho acaba uns 2px antes
+ * do fim da pegada, o resto é sombra.
+ */
+export const RECORTE_PADRAO: Recorte = [0, 0, 0, 2];
+export const RECORTE_SOLIDO: Readonly<Record<string, Recorte>> = {
+  planta: [9, 14, 9, 3], // só o vaso; a folhagem fica por cima do Avatar
+  "planta:arbusto": [3, 6, 3, 6], // moita larga e baixa
+  arvore: [11, 16, 10, 3], // só o tronco; a copa fica por cima
+  luminaria: [10, 20, 9, 1], // só o pé
+  bebedouro: [8, 6, 8, 2],
+  poltrona: [3, 2, 3, 1],
+  "mesa-centro": [2, 3, 2, 3],
+  "mesa-lateral": [6, 14, 6, 1],
+  "mesa-redonda": [4, 6, 4, 4], // tampo e banquinhos; o poste fica no meio
+  banqueta: [8, 10, 8, 4],
+  puff: [4, 10, 3, 2],
+  copiadora: [4, 4, 4, 2],
+  banco: [0, 0, 0, 4],
+  tv: [0, 0, 0, 1],
+  estante: [0, 0, 0, 0],
+  "mesa-trabalho": [0, 0, 0, 0],
+  "mesa-reuniao": [0, 4, 0, 0],
+  "mesa-piquenique": [1, 4, 1, 4],
+};
+
+
+/** Base sólida do Móvel em px (já recortada). */
+export function baseSolida(m: Movel): Rect {
+  const [e, c, d, b] = m.recorte ?? RECORTE_SOLIDO[`${m.tipo}:${m.variante}`] ?? RECORTE_SOLIDO[m.tipo] ?? RECORTE_PADRAO;
+  return {
+    x: m.col * TILE + e,
+    y: m.lin * TILE + c,
+    larg: m.larg * TILE - e - d,
+    alt: m.alt * TILE - c - b,
+  };
+}
+
 const mv = (tipo: TipoMovel, col: number, lin: number, larg = 1, alt = 1, variante?: string): Movel => ({
   tipo, col, lin, larg, alt, ...(variante ? { variante } : {}),
 });
@@ -44,10 +92,12 @@ const mv = (tipo: TipoMovel, col: number, lin: number, larg = 1, alt = 1, varian
 export type TemplateLugar = {
   nome: string;
   /**
-   * '#' parede, 'M' Móvel que bloqueia, '.' chão, '1'-'9' porta, 'a'-'z' chão de Zona.
-   * Derivado de `moveis` (todo Móvel sólido vira 'M'), então colisão e desenho vêm da mesma fonte.
+   * '#' parede, 'M' tile tocado pela base de um Móvel que bloqueia (a colisão fina usa `solidos`), '.' chão, '1'-'9' porta, 'a'-'z' chão de Zona.
+   * Derivado de `moveis`, então colisão e desenho vêm da mesma fonte.
    */
   mapa: readonly string[];
+  /** Bases sólidas dos Móveis em px (derivadas de `moveis`; é o que `bloqueado` testa além das paredes). */
+  solidos: readonly Rect[];
   /** Móveis e decoração (o web desenha cada um; só os sólidos entram na colisão). */
   moveis: readonly Movel[];
   portas: Readonly<Record<string, Porta>>;
@@ -59,6 +109,9 @@ export type TemplateLugar = {
 };
 
 type Retangulo = [col0: number, lin0: number, col1: number, lin1: number];
+
+/** Bases sólidas de todos os Móveis que bloqueiam. */
+export const solidosDe = (moveis: readonly Movel[]): Rect[] => moveis.filter(movelSolido).map(baseSolida);
 
 /** Monta o mapa ASCII: borda de parede, portas, retângulos de Zona e 'M' nas pegadas dos Móveis sólidos. */
 function montarMapa(
@@ -73,9 +126,9 @@ function montarMapa(
   );
   for (const [letra, [c0, l0, c1, l1]] of Object.entries(zonas))
     for (let l = l0; l <= l1; l++) for (let c = c0; c <= c1; c++) g[l][c] = letra;
-  for (const m of moveis) {
-    if (!movelSolido(m)) continue;
-    for (let l = m.lin; l < m.lin + m.alt; l++) for (let c = m.col; c < m.col + m.larg; c++) g[l][c] = "M";
+  for (const r of solidosDe(moveis)) {
+    for (let l = Math.floor(r.y / TILE); l < Math.ceil((r.y + r.alt) / TILE); l++)
+      for (let c = Math.floor(r.x / TILE); c < Math.ceil((r.x + r.larg) / TILE); c++) g[l][c] = "M";
   }
   for (const [d, [c, l]] of Object.entries(portas)) g[l][c] = d;
   return g.map((l) => l.join(""));
@@ -171,6 +224,7 @@ export const TEMPLATES_LUGAR: Readonly<Record<Template, TemplateLugar>> = {
   sala: {
     nome: "Sala",
     moveis: movelSala,
+    solidos: solidosDe(movelSala),
     mapa: montarMapa(30, 20, { "1": [14, 0], "2": [29, 10] }, { a: [8, 5, 19, 9] }, movelSala),
     portas: {
       "1": { destino: "escritorio", chegada: { col: 14, lin: 18 } },
@@ -184,6 +238,7 @@ export const TEMPLATES_LUGAR: Readonly<Record<Template, TemplateLugar>> = {
   escritorio: {
     nome: "Escritório",
     moveis: movelEscritorio,
+    solidos: solidosDe(movelEscritorio),
     mapa: montarMapa(30, 20, { "1": [14, 19] }, { a: [3, 2, 8, 5], b: [12, 2, 17, 5], r: [21, 2, 27, 5] }, movelEscritorio),
     portas: {
       "1": { destino: "sala", chegada: { col: 14, lin: 1 } },
@@ -200,6 +255,7 @@ export const TEMPLATES_LUGAR: Readonly<Record<Template, TemplateLugar>> = {
   terraco: {
     nome: "Terraço",
     moveis: movelTerraco,
+    solidos: solidosDe(movelTerraco),
     mapa: montarMapa(30, 20, { "1": [0, 10] }, { a: [13, 8, 17, 12] }, movelTerraco),
     portas: {
       "1": { destino: "sala", chegada: { col: 28, lin: 10 } },
@@ -224,33 +280,84 @@ export const centroTile = (col: number, lin: number) => ({
 const charEm = (t: Template, col: number, lin: number): string | undefined =>
   TEMPLATES_LUGAR[t].mapa[lin]?.[col];
 
-// Caixa de colisão nos pés do Avatar, relativa ao ponto (x, y).
-const MEIA_CAIXA = 10;
+/**
+ * Colisão do Avatar. O ponto (x, y) é o centro do corpo e o sprite pisa em y + PES (ver
+ * `AvatarSprite`). Quem colide é só a faixa dos pés, `PE_MEIA_LARG` para cada lado e de
+ * y + PE_TOPO até y + PES (sola), como em qualquer jogo 3/4: o corpo passa por trás de
+ * Móveis altos e a sola para rente à base de Móveis e paredes. Servidor e cliente usam esta função.
+ */
+export const PES = 10;
+export const PE_MEIA_LARG = 7;
+export const PE_TOPO = 6;
+/** Ponto de referência dos pés (meio da faixa): usado para Zona e Porta. */
+const PE_CENTRO = (PE_TOPO + PES) / 2;
 
-function tileBloqueia(t: Template, col: number, lin: number): boolean {
+/** Faixa dos pés do Avatar em (x, y), em px do mundo. */
+export const caixaPes = (x: number, y: number): Rect => ({
+  x: x - PE_MEIA_LARG,
+  y: y + PE_TOPO,
+  larg: 2 * PE_MEIA_LARG,
+  alt: PES - PE_TOPO,
+});
+
+const tileBloqueia = (t: Template, col: number, lin: number): boolean => {
   const c = charEm(t, col, lin);
-  return c === undefined || c === "#" || c === "M";
-}
+  return c === undefined || c === "#";
+};
 
 export function bloqueado(t: Template, x: number, y: number): boolean {
-  const cantos = [
-    [x - MEIA_CAIXA, y - MEIA_CAIXA],
-    [x + MEIA_CAIXA, y - MEIA_CAIXA],
-    [x - MEIA_CAIXA, y + MEIA_CAIXA],
-    [x + MEIA_CAIXA, y + MEIA_CAIXA],
-  ];
-  return cantos.some(([cx, cy]) => tileBloqueia(t, Math.floor(cx / TILE), Math.floor(cy / TILE)));
+  const b = caixaPes(x, y);
+  const x1 = b.x + b.larg;
+  const y1 = b.y + b.alt;
+  for (let lin = Math.floor(b.y / TILE); lin < Math.ceil(y1 / TILE); lin++)
+    for (let col = Math.floor(b.x / TILE); col < Math.ceil(x1 / TILE); col++) if (tileBloqueia(t, col, lin)) return true;
+  return TEMPLATES_LUGAR[t].solidos.some((r) => b.x < r.x + r.larg && r.x < x1 && b.y < r.y + r.alt && r.y < y1);
 }
 
-/** Letra da Zona sob o ponto, ou null. */
+/** Maior avanço por vez em `mover`: menor que qualquer faixa sólida, para não atravessar nada num quadro lento. */
+const PASSO_MAX = 4;
+
+/**
+ * Anda (dx, dy) a partir de (x, y) sem entrar em nada: eixos separados (encostar desliza) e, quando o
+ * passo não cabe, para rente ao obstáculo em vez de ficar a um passo dele.
+ */
+export function mover(t: Template, x: number, y: number, dx: number, dy: number): { x: number; y: number } {
+  const n = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) / PASSO_MAX));
+  for (let i = 0; i < n; i++) {
+    x = avancar(t, x, y, dx / n, "x");
+    y = avancar(t, x, y, dy / n, "y");
+  }
+  return { x, y };
+}
+
+/** Novo valor do eixo depois de andar `d`: inteiro se livre, senão o ponto livre mais perto do obstáculo. */
+function avancar(t: Template, x: number, y: number, d: number, eixo: "x" | "y"): number {
+  const de = eixo === "x" ? x : y;
+  if (d === 0) return de;
+  const livre = (v: number) => !(eixo === "x" ? bloqueado(t, v, y) : bloqueado(t, x, v));
+  if (livre(de + d)) return de + d;
+  let ok = 0;
+  let ruim = 1;
+  for (let i = 0; i < 8; i++) {
+    const m = (ok + ruim) / 2;
+    if (livre(de + d * m)) ok = m;
+    else ruim = m;
+  }
+  return de + d * ok;
+}
+
+/** Zona sob os pés do Avatar. */
+const charPes = (t: Template, x: number, y: number) => charEm(t, Math.floor(x / TILE), Math.floor((y + PE_CENTRO) / TILE));
+
+/** Letra da Zona sob os pés, ou null. */
 export function zonaEm(t: Template, x: number, y: number): string | null {
-  const c = charEm(t, Math.floor(x / TILE), Math.floor(y / TILE));
+  const c = charPes(t, x, y);
   return c !== undefined && c >= "a" && c <= "z" ? c : null;
 }
 
-/** Porta sob o ponto (dígito + destino), ou null. */
+/** Porta sob os pés (dígito + destino), ou null. */
 export function portaEm(t: Template, x: number, y: number): (Porta & { digito: string }) | null {
-  const c = charEm(t, Math.floor(x / TILE), Math.floor(y / TILE));
+  const c = charPes(t, x, y);
   if (c === undefined || c < "1" || c > "9") return null;
   const porta = TEMPLATES_LUGAR[t].portas[c];
   return porta ? { ...porta, digito: c } : null;

@@ -2,7 +2,7 @@ import {
   TEMPLATES_LUGAR,
   TILE,
   VELOCIDADE,
-  bloqueado,
+  mover,
   portaEm,
   type AvatarEstado,
   type Direcao,
@@ -11,6 +11,7 @@ import {
 } from "@baguin/shared";
 import Phaser from "phaser";
 import { AvatarSprite } from "./AvatarSprite";
+import { DepuracaoColisao } from "./depuracaoColisao";
 import { indicadorDe, statusDe } from "./indicador";
 import { PROF_CHAO, desenharMapa, objetosDoMapa, portasDoMapa, zonasDoMapa, type Lado } from "./mapa";
 import { escalaTexto, pilulaClara, podarTexturasDeTexto, resolucaoTexto } from "./rotulos";
@@ -49,6 +50,8 @@ export class LugarScene extends Phaser.Scene {
   private enviouParado = true;
   private dirEnviada: Direcao = "baixo";
   private descartar: (() => void)[] = [];
+  /** Só em dev: F2 mostra a colisão. */
+  private depuracao: DepuracaoColisao | null = null;
 
   constructor(
     private sala: Sala,
@@ -62,6 +65,7 @@ export class LugarScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor("#16121e").startFollow(this.cameraAlvo, true, 1, 1);
     this.ajustarZoom();
     this.scale.on("resize", this.ajustarZoom, this);
+    if (import.meta.env.DEV) this.depuracao = new DepuracaoColisao(this);
 
     const s = this.sala;
     this.descartar.push(
@@ -86,6 +90,7 @@ export class LugarScene extends Phaser.Scene {
       this.scale.off("resize", this.ajustarZoom, this);
       this.descartar.forEach((f) => f());
       this.teclado.destruir();
+      this.depuracao?.destruir();
     };
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, limpar);
     this.events.once(Phaser.Scenes.Events.DESTROY, limpar);
@@ -132,6 +137,7 @@ export class LugarScene extends Phaser.Scene {
     }
     this.cameras.main.setBounds(0, 0, larg, alt);
     this.montarRotulos(lugar.template);
+    this.depuracao?.montar(lugar.template);
 
     this.cameras.main.fadeIn(FADE_ENTRADA_MS, 22, 18, 30);
     this.ativo = true;
@@ -237,6 +243,10 @@ export class LugarScene extends Phaser.Scene {
       const dir = o.av.dir as Direcao;
       o.sprite.atualizar(o.x, o.y, dir, o.av.movendo || falta > 1, tempo);
     }
+    if (this.depuracao?.visivel) {
+      const outros = [...this.avatares].filter(([id]) => id !== this.sala.contaId).map(([, o]) => o);
+      this.depuracao.atualizar([...(this.eu ? [this.eu] : []), ...outros]);
+    }
     if (this.eu) {
       this.cameraAlvo.x = Math.round(this.eu.x);
       this.cameraAlvo.y = Math.round(this.eu.y);
@@ -249,17 +259,11 @@ export class LugarScene extends Phaser.Scene {
     if (dx || dy) {
       const norma = Math.hypot(dx, dy);
       const passo = VELOCIDADE * dt;
-      // eixos separados: encostar numa parede desliza ao longo dela
-      const nx = eu.x + (dx / norma) * passo;
-      if (!bloqueado(template, nx, eu.y)) {
-        moveu ||= nx !== eu.x;
-        eu.x = nx;
-      }
-      const ny = eu.y + (dy / norma) * passo;
-      if (!bloqueado(template, eu.x, ny)) {
-        moveu ||= ny !== eu.y;
-        eu.y = ny;
-      }
+      // eixos separados: encostar numa parede desliza ao longo dela; para rente ao obstáculo
+      const novo = mover(template, eu.x, eu.y, (dx / norma) * passo, (dy / norma) * passo);
+      moveu = Math.hypot(novo.x - eu.x, novo.y - eu.y) > 0.05; // sobras da busca rente ao obstáculo não contam
+      eu.x = novo.x;
+      eu.y = novo.y;
       eu.dir = direcaoDe(dx, dy, eu.dir);
     }
     eu.movendo = moveu;
