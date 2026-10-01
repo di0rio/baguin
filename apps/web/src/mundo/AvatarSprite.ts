@@ -1,4 +1,4 @@
-import { BALAO_MS, type Direcao, type Pecas } from "@baguin/shared";
+import { BALAO_MS, PES, type Direcao, type Pecas } from "@baguin/shared";
 import Phaser from "phaser";
 import { FRAME_A, FRAME_L, QUADROS_POR_DIRECAO, ORDEM_DIRECOES, quadro, renderizarSpritesheet } from "../avatar/renderizar";
 import type { StatusAvatar } from "./indicador";
@@ -7,8 +7,7 @@ import { balao, etiquetaNome, soltarBalao, type Textura, type TexturaBalao } fro
 /** Ciclo de caminhada: parado, passo A, parado, passo B. */
 const CICLO = [0, 1, 0, 2];
 const MS_POR_QUADRO = 140;
-/** O ponto (x, y) do Avatar é o centro da caixa de colisão; os pés ficam 10px abaixo. */
-const PES = 10;
+// O ponto (x, y) do Avatar é o centro do corpo; os pés (sola) ficam PES px abaixo, e é aí que ele pisa.
 /** Topo do sprite, relativo ao centro. */
 const TOPO = PES - FRAME_A;
 /** A etiqueta de nome fica logo acima da cabeça; a pílula ocupa 18px dentro de uma textura de 22px. */
@@ -78,14 +77,14 @@ export class AvatarSprite {
     this.sprite.setTexture(this.chaveTextura, 0);
   }
 
-  /** Posição em px do mundo do centro da caixa de colisão. */
+  /** Posição em px do mundo do centro do corpo (os pés ficam `PES` abaixo). */
   atualizar(x: number, y: number, dir: Direcao, movendo: boolean, agora: number) {
     if (!this.chaveTextura) return;
     const rx = Math.round(x);
     const ry = Math.round(y);
     const f = movendo ? CICLO[Math.floor(agora / MS_POR_QUADRO) % CICLO.length] : 0;
     this.sprite.setFrame(quadro(dir, f));
-    this.corpo.setPosition(rx, ry).setDepth(ry);
+    this.corpo.setPosition(rx, ry).setDepth(ry + PES); // profundidade pela sola, como os Móveis (pela base)
     this.topo.setPosition(rx, ry);
     if (this.balaoAte && agora > this.balaoAte) this.esconderBalao();
   }
