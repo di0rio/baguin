@@ -1,12 +1,18 @@
 import { BALAO_MAX } from "@baguin/shared";
 import { ArrowUp, VolumeX } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Button } from "../../components/ui/button";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "../../components/ui/input-group";
+import { Kbd } from "../../components/ui/kbd";
+import { cn } from "../../lib/utils";
 import type { Sala } from "../sala";
 import { horaCurta, useAte } from "./hooks";
+import { VIDRO } from "./superficie";
 
 const emCampo = (el: Element | null) => !!el && ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName);
 /** a contagem só aparece perto do limite */
 const PERTO = Math.floor(BALAO_MAX * 0.8);
+const POSICAO = "absolute bottom-[5.5rem] left-1/2 z-10 -translate-x-1/2";
 
 /**
  * Campo de Balão: Enter abre/envia, Esc fecha. Enquanto aberto a atividade é "digitando".
@@ -61,17 +67,17 @@ export function CampoBalao({
 
   if (silenciado) {
     return (
-      <div className="balao-aviso vidro" role="status">
-        <VolumeX size={16} strokeWidth={2} aria-hidden />
+      <div className={cn(POSICAO, VIDRO, "flex items-center gap-2 rounded-full px-4 py-2.5 text-sm")} role="status">
+        <VolumeX className="size-4 text-muted-foreground" aria-hidden />
         Você está silenciado até {horaCurta(silenciadoAte)}
       </div>
     );
   }
   if (!aberto) return null;
   return (
-    <form className="balao-campo vidro" onSubmit={enviar}>
-      <div className="balao-linha">
-        <input
+    <form className={cn(POSICAO, "flex w-[min(30rem,calc(100%-1.5rem))] flex-col items-center gap-2")} onSubmit={enviar}>
+      <InputGroup className={cn(VIDRO, "rounded-full has-focus-visible:border-ring")}>
+        <InputGroupInput
           ref={ref}
           value={texto}
           maxLength={BALAO_MAX}
@@ -88,17 +94,19 @@ export function CampoBalao({
           }}
           onBlur={() => setAberto(false)}
         />
-        {texto.length >= PERTO && (
-          <span className="balao-contagem" data-limite={texto.length >= BALAO_MAX}>
-            {texto.length}/{BALAO_MAX}
-          </span>
-        )}
-        <button type="submit" className="balao-enviar" aria-label="Enviar Balão" disabled={!texto.trim()} onMouseDown={(e) => e.preventDefault()}>
-          <ArrowUp size={18} strokeWidth={2.25} aria-hidden />
-        </button>
-      </div>
-      <p className="balao-dica">
-        <kbd>Enter</kbd> envia <span aria-hidden>·</span> <kbd>Esc</kbd> fecha
+        <InputGroupAddon align="inline-end" className="gap-2">
+          {texto.length >= PERTO && (
+            <span className={cn("text-xs tabular-nums text-muted-foreground", texto.length >= BALAO_MAX && "text-destructive-foreground")}>
+              {texto.length}/{BALAO_MAX}
+            </span>
+          )}
+          <Button type="submit" size="icon-sm" className="rounded-full" aria-label="Enviar Balão" disabled={!texto.trim()} onMouseDown={(e) => e.preventDefault()}>
+            <ArrowUp />
+          </Button>
+        </InputGroupAddon>
+      </InputGroup>
+      <p className={cn(VIDRO, "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs text-muted-foreground")}>
+        <Kbd>Enter</Kbd> envia <span aria-hidden>·</span> <Kbd>Esc</Kbd> fecha
       </p>
     </form>
   );

@@ -1,10 +1,11 @@
 import type { EspacoDetalheDto } from "@baguin/shared";
 import { Suspense, lazy, useEffect, useState } from "react";
+import { DoorClosed } from "lucide-react";
 import { Link, useParams } from "react-router";
 import { ApiErro, api } from "../api";
-import { DoorClosed } from "lucide-react";
-import { Estado, Pagina } from "../componentes";
-import { Carregando } from "../sessao";
+import { Carregando } from "../components/carregando";
+import { EstadoPagina } from "../components/estado-pagina";
+import { Button } from "../components/ui/button";
 
 // o Phaser é grande: só baixa quando o Espaço abre
 const Mundo = lazy(() => import("../mundo/Mundo").then((m) => ({ default: m.Mundo })));
@@ -28,22 +29,9 @@ export function Espaco() {
 
   if (erro) {
     return (
-      <Pagina estreita>
-        <div className="cartao">
-          <Estado
-            icone={<DoorClosed size={26} strokeWidth={2} aria-hidden />}
-            tom="perigo"
-            titulo="Não deu pra abrir o Espaço"
-            acoes={
-              <Link to="/" className="primario cheio">
-                Voltar pro início
-              </Link>
-            }
-          >
-            {erro}
-          </Estado>
-        </div>
-      </Pagina>
+      <EstadoPagina icone={<DoorClosed />} tom="perigo" titulo="Não deu pra abrir o Espaço" acoes={<Button render={<Link to="/" />}>Voltar pro início</Button>}>
+        {erro}
+      </EstadoPagina>
     );
   }
   if (!detalhe) return <Carregando texto="Abrindo o Espaço..." />;

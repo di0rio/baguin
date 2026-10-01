@@ -8,7 +8,6 @@ import { LugarScene } from "./LugarScene";
 import { Sala } from "./sala";
 import { fontesProntas } from "./rotulos";
 import { criarVoz, type Voz } from "./voz";
-import "./mundo.css";
 
 /** O mundo do Espaço: cena Phaser (canvas) + HUD React por cima. */
 export function Mundo({ detalhe }: { detalhe: EspacoDetalheDto }) {
@@ -57,8 +56,8 @@ export function Mundo({ detalhe }: { detalhe: EspacoDetalheDto }) {
   }, [contaId, espacoId, nav]);
 
   return (
-    <div className="mundo">
-      <div className="mundo-palco" ref={palco} />
+    <div className="fixed inset-0 overflow-hidden bg-[#16121e]">
+      <div className="absolute inset-0 [&_canvas]:block" ref={palco} />
       {nucleo && <Hud sala={nucleo.sala} voz={nucleo.voz} detalhe={detalhe} />}
     </div>
   );

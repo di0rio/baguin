@@ -1,16 +1,26 @@
 import type { ConviteDto } from "@baguin/shared";
-import { Check, Copy, Link2, Plus, Trash2, X } from "lucide-react";
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { Check, Copy, Link2, Plus, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "../../api";
+import { Erro } from "../../components/erro";
+import { Button } from "../../components/ui/button";
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "../../components/ui/empty";
+import { Field, FieldLabel } from "../../components/ui/field";
+import { Form } from "../../components/ui/form";
+import { Input } from "../../components/ui/input";
+import { SheetDescription, SheetHeader, SheetPanel, SheetTitle } from "../../components/ui/sheet";
+import { toastManager } from "../../components/ui/toast";
+import { cn } from "../../lib/utils";
 
 const link = (codigo: string) => `${window.location.origin}/convite/${codigo}`;
 
 /** Painel de Convites (Dono/Moderador): gerar, copiar link, revogar. */
-export function PainelConvites({ espacoId, onFechar }: { espacoId: string; onFechar: () => void }) {
+export function PainelConvites({ espacoId }: { espacoId: string }) {
   const [convites, setConvites] = useState<ConviteDto[] | null>(null);
   const [horas, setHoras] = useState(24);
   const [usosMax, setUsosMax] = useState(5);
   const [erro, setErro] = useState("");
+  const [gerando, setGerando] = useState(false);
   const [copiado, setCopiado] = useState("");
 
   const carregar = useCallback(() => {
@@ -18,14 +28,16 @@ export function PainelConvites({ espacoId, onFechar }: { espacoId: string; onFec
   }, [espacoId]);
   useEffect(carregar, [carregar]);
 
-  async function criar(e: FormEvent) {
-    e.preventDefault();
+  async function criar() {
     setErro("");
+    setGerando(true);
     try {
       await api.criarConvite(espacoId, horas, usosMax);
       carregar();
     } catch (err) {
       setErro((err as Error).message);
+    } finally {
+      setGerando(false);
     }
   }
 
@@ -33,6 +45,7 @@ export function PainelConvites({ espacoId, onFechar }: { espacoId: string; onFec
     try {
       await navigator.clipboard.writeText(link(codigo));
       setCopiado(codigo);
+      toastManager.add({ type: "success", title: "Link copiado", timeout: 2500 });
       setTimeout(() => setCopiado(""), 2000);
     } catch {
       setErro("Não deu para copiar. Selecione o link e copie manualmente.");
@@ -50,70 +63,71 @@ export function PainelConvites({ espacoId, onFechar }: { espacoId: string; onFec
 
   return (
     <>
-      <header className="painel-topo">
-        <h2>Convites</h2>
-        <button type="button" className="icone pequeno sem-borda" onClick={onFechar} aria-label="Fechar painel">
-          <X size={18} strokeWidth={2} aria-hidden />
-        </button>
-      </header>
-      <div className="painel-corpo">
-        {erro && (
-          <p className="alerta" role="alert">
-            {erro}
-          </p>
-        )}
+      <SheetHeader className="p-5 pb-3">
+        <SheetTitle>Convites</SheetTitle>
+        <SheetDescription>Gere um link e mande pra quem você quer chamar.</SheetDescription>
+      </SheetHeader>
+      <SheetPanel className="flex flex-col gap-6 p-5 pt-2">
+        {erro && <Erro>{erro}</Erro>}
 
-        <form className="form" onSubmit={(e) => void criar(e)}>
-          <div className="grade-campos">
-            <label>
-              Validade (horas)
-              <input type="number" min={1} max={720} value={horas} onChange={(e) => setHoras(Number(e.target.value))} />
-            </label>
-            <label>
-              Usos
-              <input type="number" min={1} max={100} value={usosMax} onChange={(e) => setUsosMax(Number(e.target.value))} />
-            </label>
+        <Form
+          className="flex flex-col gap-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void criar();
+          }}
+        >
+          <div className="grid grid-cols-2 gap-3">
+            <Field>
+              <FieldLabel>Validade (horas)</FieldLabel>
+              <Input type="number" name="horas" min={1} max={720} value={horas} onChange={(e) => setHoras(Number(e.target.value))} />
+            </Field>
+            <Field>
+              <FieldLabel>Usos</FieldLabel>
+              <Input type="number" name="usos" min={1} max={100} value={usosMax} onChange={(e) => setUsosMax(Number(e.target.value))} />
+            </Field>
           </div>
-          <button className="primario cheio">
-            <Plus size={18} strokeWidth={2} aria-hidden />
+          <Button type="submit" loading={gerando}>
+            <Plus />
             Gerar Convite
-          </button>
-        </form>
+          </Button>
+        </Form>
 
-        <section aria-label="Convites ativos">
-          <h3>Ativos{convites ? ` · ${convites.length}` : ""}</h3>
+        <section aria-label="Convites ativos" className="flex flex-col gap-3">
+          <h3 className="text-sm font-semibold">Ativos{convites ? ` · ${convites.length}` : ""}</h3>
           {convites && convites.length === 0 && (
-            <div className="painel-vazio">
-              <Link2 size={20} strokeWidth={2} aria-hidden />
-              <p>Nenhum Convite ativo. Gere um e mande o link pra quem você quer chamar.</p>
-            </div>
+            <Empty className="rounded-xl border border-dashed py-8 md:py-8">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <Link2 />
+                </EmptyMedia>
+                <EmptyTitle className="text-base">Nenhum Convite ativo</EmptyTitle>
+                <EmptyDescription>Gere um e mande o link pra quem você quer chamar.</EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           )}
-          <ul className="simples convites-lista">
+          <ul className="flex flex-col gap-2.5">
             {convites?.map((c) => (
-              <li key={c.codigo} className="convite-item">
-                <code className="convite-link">{link(c.codigo)}</code>
-                <span className="convite-meta">
+              <li key={c.codigo} className="flex flex-col gap-2.5 rounded-xl border bg-card p-3">
+                <code className="truncate rounded-md bg-muted px-2 py-1.5 font-mono text-xs">{link(c.codigo)}</code>
+                <span className="text-xs text-muted-foreground">
                   {c.usos}/{c.usosMax} usos · expira {new Date(c.expiraEm).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
                 </span>
-                <div className="convite-acoes">
-                  <button type="button" className="secundario pequeno copiar" data-copiado={copiado === c.codigo} onClick={() => void copiar(c.codigo)}>
-                    <span className="copiar-estado copiar-normal">
-                      <Copy size={16} strokeWidth={2} aria-hidden /> Copiar link
-                    </span>
-                    <span className="copiar-estado copiar-ok" aria-live="polite">
-                      <Check size={16} strokeWidth={2.25} aria-hidden /> Copiado!
-                    </span>
-                  </button>
-                  <button type="button" className="fantasma perigo pequeno" onClick={() => void revogar(c.codigo)}>
-                    <Trash2 size={16} strokeWidth={2} aria-hidden />
+                <div className="flex gap-2">
+                  <Button type="button" variant="outline" size="sm" className={cn("flex-1", copiado === c.codigo && "text-success-foreground")} onClick={() => void copiar(c.codigo)}>
+                    {copiado === c.codigo ? <Check /> : <Copy />}
+                    {copiado === c.codigo ? "Copiado" : "Copiar link"}
+                  </Button>
+                  <Button type="button" variant="ghost" size="sm" className="text-destructive-foreground" onClick={() => void revogar(c.codigo)}>
+                    <Trash2 />
                     Revogar
-                  </button>
+                  </Button>
                 </div>
               </li>
             ))}
           </ul>
         </section>
-      </div>
+      </SheetPanel>
     </>
   );
 }

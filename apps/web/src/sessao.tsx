@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { Navigate, useLocation } from "react-router";
 import { api } from "./api";
 import { authClient } from "./auth";
+import { Carregando } from "./components/carregando";
 
 type Sessao = {
   /** undefined enquanto carrega; null sem login */
@@ -53,13 +54,4 @@ export function Protegido({ children, exigirAvatar = true }: { children: ReactNo
   if (!eu) return <Navigate to={`/entrar?voltar=${voltar}`} replace />;
   if (exigirAvatar && !eu.avatar) return <Navigate to={`/avatar?voltar=${voltar}`} replace />;
   return children;
-}
-
-export function Carregando({ texto = "Carregando..." }: { texto?: string }) {
-  return (
-    <div className="carregando" role="status">
-      <span className="giro" />
-      {texto}
-    </div>
-  );
 }
