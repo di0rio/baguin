@@ -14,6 +14,8 @@ export const auth = betterAuth({
   baseURL: env.authUrl,
   secret: env.secret,
   trustedOrigins: [env.webOrigin],
+  // atrás do Cloudflare + Caddy o X-Forwarded-For traz o IP de egress do CF: o cf-connecting-ip é o do cliente
+  advanced: { ipAddress: { ipAddressHeaders: ["cf-connecting-ip", "x-forwarded-for"] } },
   database: drizzleAdapter(db, { provider: "pg", schema }),
   databaseHooks: { user: { create: { before: async (u) => limparNome(u) }, update: { before: async (u) => limparNome(u) } } },
   emailAndPassword: { enabled: env.devLogin },

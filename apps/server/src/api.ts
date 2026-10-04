@@ -22,6 +22,7 @@ import { db, schema } from "./db/index.js";
 import { env } from "./env.js";
 import { assinarIngresso } from "./ingresso.js";
 import { derrubarDaVoz, permitirPublicar, tokenLivekit } from "./livekit.js";
+import { criarLimitador } from "./limite.js";
 import { estaNoLugar } from "./rooms/LugarRoom.js";
 
 const { user, avatar, espaco, lugar, membro, convite, bloqueio } = schema;
@@ -34,6 +35,12 @@ class HttpErro extends Error {
     super(mensagem);
   }
 }
+
+/** Cotas por conta (contra abuso: cada Espaço cria 3 Lugares e cada Convite é uma linha no banco). */
+const MAX_ESPACOS_DONO = 5;
+const MAX_CONVITES_ATIVOS = 20;
+/** Escritas por conta: 60/min (em memória, por instância do servidor). */
+const podeEscrever = criarLimitador(60, 60_000);
 
 const uuid = z.uuid();
 const parse = <T extends z.ZodType>(s: T, v: unknown): z.infer<T> => {
@@ -56,6 +63,9 @@ const logado =
   async (req, res) => {
     const conta = await contaDaRequisicao(req);
     if (!conta) throw new HttpErro(401, "login necessário");
+    if (req.method !== "GET" && req.method !== "HEAD" && !podeEscrever(conta.id)) {
+      throw new HttpErro(429, "muitas requisições, tente de novo em instantes");
+    }
     await fn(Object.assign(req, { conta }), res);
   };
 
@@ -137,6 +147,11 @@ export function montarApi(app: Application) {
     next();
   });
 
+  // o Colyseus responderia "Colyseus <versão>" aqui; a raiz não precisa dizer qual servidor é
+  app.get("/", (_req, res) => {
+    res.status(204).end();
+  });
+
   api.get("/config", (_req, res) => {
     const dto: ConfigDto = { provedores: provedoresAtivos(), devLogin: env.devLogin, livekitUrl: env.livekit.url };
     res.json(dto);
@@ -179,6 +194,11 @@ export function montarApi(app: Application) {
     "/espacos",
     logado(async (req, res) => {
       const { nome } = parse(z.object({ nome: z.string().trim().min(1).max(60) }), req.body);
+      const [donos] = await db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(membro)
+        .where(and(eq(membro.contaId, req.conta.id), eq(membro.papel, "dono")));
+      if (donos.n >= MAX_ESPACOS_DONO) throw new HttpErro(403, `limite de ${MAX_ESPACOS_DONO} Espaços por conta`);
       const id = await db.transaction(async (tx) => {
         const [e] = await tx.insert(espaco).values({ nome }).returning({ id: espaco.id });
         await tx.insert(lugar).values(
@@ -214,6 +234,15 @@ export function montarApi(app: Application) {
         z.object({ horas: z.number().int().min(1).max(24 * 30), usosMax: z.number().int().min(1).max(100) }),
         req.body,
       );
+      const [ativos] = await db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(convite)
+        .where(
+          and(eq(convite.espacoId, id), eq(convite.revogado, false), gt(convite.expiraEm, new Date()), lt(convite.usos, convite.usosMax)),
+        );
+      if (ativos.n >= MAX_CONVITES_ATIVOS) {
+        throw new HttpErro(403, `limite de ${MAX_CONVITES_ATIVOS} Convites ativos por Espaço: revogue algum antes`);
+      }
       const [c] = await db
         .insert(convite)
         .values({

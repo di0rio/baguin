@@ -1,0 +1,17 @@
+# Cloudflare Pages: headers de segurança das páginas estáticas (não se aplicam às respostas das Functions em /api/*).
+#
+# CSP:
+# - sem 'unsafe-eval': o Phaser (build ESM) e o livekit-client não usam eval/new Function no caminho de runtime.
+# - style-src 'unsafe-inline': o React emite atributos style="..." e o Phaser mexe em estilos do canvas.
+# - fonts: Inter vem do Google Fonts (index.html).
+# - connect-src amplo (https: wss:): VITE_COLYSEUS_URL é definido em build e o URL do LiveKit chega por /api/config
+#   em runtime, então os hosts exatos não são conhecidos aqui. Para fechar, troque https:/wss: pelos hosts reais
+#   (ex.: https://api.exemplo.com wss://api.exemplo.com wss://livekit.exemplo.com).
+# - blob:/data: em img-src/connect-src: texturas geradas em runtime pelo Phaser.
+# - worker-src blob:: workers internos do livekit-client.
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' https: wss: blob: data:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: microphone=(self), camera=(), geolocation=(), payment=(), usb=()

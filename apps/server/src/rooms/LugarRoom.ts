@@ -26,7 +26,7 @@ import { and, eq, or } from "drizzle-orm";
 import { z } from "zod";
 import { bus, type EventoBloqueio, type EventoModeracao } from "../bus.js";
 import { db, schema } from "../db/index.js";
-import { assinarIngresso, verificarIngresso } from "../ingresso.js";
+import { assinarIngresso, consumirIngresso } from "../ingresso.js";
 import { AvatarEstado, LugarEstado } from "./estado.js";
 
 const { avatar, lugar, membro, user, bloqueio } = schema;
@@ -56,6 +56,7 @@ const moverSchema = z.object({
 });
 const balaoSchema = z.object({ texto: z.string().max(BALAO_MAX * 2) });
 const BALAO_COOLDOWN_MS = 500;
+const PORTA_COOLDOWN_MS = 1000;
 const atividadeSchema = z.object({ atividade: z.enum(ATIVIDADES) });
 const naoPerturbeSchema = z.object({ ativo: z.boolean() });
 
@@ -66,7 +67,7 @@ const ativos = new Map<string, Client>();
 export const estaNoLugar = (contaId: string, lugarId: string) =>
   (ativos.get(contaId)?.auth as Auth | undefined)?.lugarId === lugarId;
 
-type Jogador = { client: Client; orcamento: number; ultimo: number; ultimoBalao: number };
+type Jogador = { client: Client; orcamento: number; ultimo: number; ultimoBalao: number; ultimaPorta: number };
 
 export class LugarRoom extends Room<{ state: LugarEstado }> {
   maxClients = 100;
@@ -83,7 +84,7 @@ export class LugarRoom extends Room<{ state: LugarEstado }> {
 
   static async onAuth(_token: string, options: unknown): Promise<Auth> {
     const opcoes = (options ?? {}) as { ingresso?: unknown; lugarId?: unknown };
-    const ing = await verificarIngresso(opcoes.ingresso);
+    const ing = await consumirIngresso(opcoes.ingresso);
     if (!ing || ing.lugarId !== opcoes.lugarId) throw new Error("ingresso inválido");
 
     const [m] = await db
@@ -170,6 +171,7 @@ export class LugarRoom extends Room<{ state: LugarEstado }> {
       orcamento: VELOCIDADE * ORCAMENTO_FATOR * ORCAMENTO_TETO_S,
       ultimo: Date.now(),
       ultimoBalao: 0,
+      ultimaPorta: 0,
     });
 
     const rows = await db
@@ -253,6 +255,11 @@ export class LugarRoom extends Room<{ state: LugarEstado }> {
     if (!av) return;
     const porta = portaEm(this.template, av.x, av.y);
     if (!porta) return;
+    // sem cooldown cada mensagem faria consulta ao banco + assinatura de JWT
+    const jogador = this.jogadores.get(av.contaId)!;
+    const agora = Date.now();
+    if (agora - jogador.ultimaPorta < PORTA_COOLDOWN_MS) return;
+    jogador.ultimaPorta = agora;
     const [destino] = await db
       .select({ id: lugar.id })
       .from(lugar)

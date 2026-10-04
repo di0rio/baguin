@@ -6,8 +6,20 @@ const secret = process.env.BETTER_AUTH_SECRET ?? SECRET_DEV;
 const authUrl = process.env.BETTER_AUTH_URL ?? webOrigin;
 
 // Produção (NODE_ENV ou URL pública https): segredo forte obrigatório, senão assina sessões com chave conhecida.
-if ((process.env.NODE_ENV === "production" || authUrl.startsWith("https")) && (secret === SECRET_DEV || secret.length < 32)) {
-  throw new Error("BETTER_AUTH_SECRET ausente, padrão ou com menos de 32 caracteres (gere com: openssl rand -base64 32)");
+const producao = process.env.NODE_ENV === "production" || authUrl.startsWith("https");
+const livekitKey = process.env.LIVEKIT_API_KEY ?? "devkey";
+const livekitSecret = process.env.LIVEKIT_API_SECRET ?? "secret";
+if (producao) {
+  if (secret === SECRET_DEV || secret.length < 32) {
+    throw new Error("BETTER_AUTH_SECRET ausente, padrão ou com menos de 32 caracteres (gere com: openssl rand -base64 32)");
+  }
+  // as chaves de dev do LiveKit são públicas: qualquer um forjaria token de voz
+  if (livekitKey === "devkey" || livekitSecret === "secret") {
+    throw new Error("LIVEKIT_API_KEY/LIVEKIT_API_SECRET ausentes ou com os valores de desenvolvimento");
+  }
+  if (process.env.AUTH_DEV_LOGIN === "true") {
+    throw new Error("AUTH_DEV_LOGIN=true não é permitido em produção (cadastro por e-mail e senha sem verificação)");
+  }
 }
 
 export const env = {
@@ -27,7 +39,7 @@ export const env = {
       : undefined,
   livekit: {
     url: process.env.LIVEKIT_URL ?? "ws://localhost:7880",
-    apiKey: process.env.LIVEKIT_API_KEY ?? "devkey",
-    apiSecret: process.env.LIVEKIT_API_SECRET ?? "secret",
+    apiKey: livekitKey,
+    apiSecret: livekitSecret,
   },
 };
