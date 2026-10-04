@@ -6,3 +6,6 @@ dist
 tools/
 .data/
 *.tsbuildinfo
+
+# graphify
+graphify-out/
