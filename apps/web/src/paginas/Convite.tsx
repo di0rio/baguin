@@ -1,10 +1,15 @@
 import type { ConviteInfoDto } from "@baguin/shared";
 import { useEffect, useState } from "react";
-import { Ban, Clock, HelpCircle, PartyPopper } from "lucide-react";
+import { Ban, Clock, HelpCircle } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router";
 import { ApiErro, api } from "../api";
-import { Erro, Estado, Pagina } from "../componentes";
-import { Carregando } from "../sessao";
+import { CapaEspaco } from "../components/capa-espaco";
+import { Carregando } from "../components/carregando";
+import { Erro } from "../components/erro";
+import { EstadoPagina } from "../components/estado-pagina";
+import { CONTENEDOR, Pagina } from "../components/cabecalho";
+import { Button } from "../components/ui/button";
+import { cn } from "../lib/utils";
 
 type Falha = { tipo: "banido" | "expirado" | "inexistente" | "outro"; mensagem: string };
 
@@ -20,9 +25,9 @@ function falhaDe(e: unknown): Falha {
 }
 
 const VoltarInicio = () => (
-  <Link to="/" className="secundario cheio">
+  <Button variant="outline" render={<Link to="/" />}>
     Voltar pro início
-  </Link>
+  </Button>
 );
 
 export function Convite() {
@@ -54,48 +59,51 @@ export function Convite() {
 
   if (!info && !falha) return <Carregando texto="Abrindo o Convite..." />;
 
+  if (falha?.tipo === "banido")
+    return (
+      <EstadoPagina icone={<Ban />} tom="perigo" titulo="Você não pode entrar neste Espaço" acoes={<VoltarInicio />}>
+        {falha.mensagem}
+      </EstadoPagina>
+    );
+  if (falha?.tipo === "expirado")
+    return (
+      <EstadoPagina icone={<Clock />} tom="aviso" titulo="Este Convite não vale mais" acoes={<VoltarInicio />}>
+        {falha.mensagem}
+      </EstadoPagina>
+    );
+  if (falha)
+    return (
+      <EstadoPagina icone={<HelpCircle />} tom="perigo" titulo="Não deu pra abrir o Convite" acoes={<VoltarInicio />}>
+        {falha.mensagem}
+      </EstadoPagina>
+    );
+  if (info && !info.valido)
+    return (
+      <EstadoPagina icone={<Clock />} tom="aviso" titulo={`O Convite para ${info.espacoNome} não vale mais`} acoes={<VoltarInicio />}>
+        Ele expirou, foi revogado ou já foi usado o máximo de vezes. Peça um novo pra quem te convidou.
+      </EstadoPagina>
+    );
+
   return (
-    <Pagina estreita>
-      <div className="cartao">
-        {falha?.tipo === "banido" && (
-          <Estado icone={<Ban size={26} strokeWidth={2} aria-hidden />} tom="perigo" titulo="Você não pode entrar neste Espaço" acoes={<VoltarInicio />}>
-            {falha.mensagem}
-          </Estado>
-        )}
-        {falha?.tipo === "expirado" && (
-          <Estado icone={<Clock size={26} strokeWidth={2} aria-hidden />} tom="aviso" titulo="Este Convite não vale mais" acoes={<VoltarInicio />}>
-            {falha.mensagem}
-          </Estado>
-        )}
-        {(falha?.tipo === "inexistente" || falha?.tipo === "outro") && (
-          <Estado icone={<HelpCircle size={26} strokeWidth={2} aria-hidden />} tom="perigo" titulo="Não deu pra abrir o Convite" acoes={<VoltarInicio />}>
-            {falha.mensagem}
-          </Estado>
-        )}
-        {info && !falha && info.valido && (
-          <div className="convite">
-            <span className="estado-icone">
-              <PartyPopper size={26} strokeWidth={2} aria-hidden />
-            </span>
-            <p className="rotulo">Você foi convidado para</p>
-            <h1>{info.espacoNome}</h1>
-            <p className="lead">Entre pra encontrar a galera, conversar e ficar junto.</p>
-            <div className="acoes-estado">
-              {erroEntrar && <Erro>{erroEntrar}</Erro>}
-              <button className="primario grande cheio" onClick={() => void entrar()} disabled={entrando}>
-                Entrar no Espaço
-              </button>
-              <Link to="/" className="fantasma cheio">
-                Agora não
-              </Link>
-            </div>
+    <Pagina>
+      <div className={cn(CONTENEDOR, "flex justify-center py-10 sm:py-16")}>
+        <div className="flex w-full max-w-md flex-col gap-6 rounded-2xl border bg-card p-3 pb-6 shadow-xs/5">
+          <CapaEspaco id={info!.espacoNome} />
+          <div className="flex flex-col items-center gap-2 px-4 text-center">
+            <p className="text-sm font-medium text-muted-foreground">Você foi convidado para</p>
+            <h1 className="text-balance font-heading text-3xl font-semibold tracking-[-0.03em]">{info!.espacoNome}</h1>
+            <p className="text-pretty text-muted-foreground">Entre pra encontrar a galera, conversar e ficar junto.</p>
           </div>
-        )}
-        {info && !falha && !info.valido && (
-          <Estado icone={<Clock size={26} strokeWidth={2} aria-hidden />} tom="aviso" titulo={`O Convite para ${info.espacoNome} não vale mais`} acoes={<VoltarInicio />}>
-            Ele expirou, foi revogado ou já foi usado o máximo de vezes. Peça um novo pra quem te convidou.
-          </Estado>
-        )}
+          <div className="flex flex-col gap-2.5 px-4">
+            {erroEntrar && <Erro>{erroEntrar}</Erro>}
+            <Button size="xl" onClick={() => void entrar()} loading={entrando}>
+              Entrar no Espaço
+            </Button>
+            <Button size="xl" variant="ghost" render={<Link to="/" />}>
+              Agora não
+            </Button>
+          </div>
+        </div>
       </div>
     </Pagina>
   );

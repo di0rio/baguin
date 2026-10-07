@@ -27,12 +27,24 @@ _Avoid_: Cargo, role, admin, permissão
 ## Avatar
 
 **Avatar**:
-O boneco 2D (pixel art, visto de cima) que representa uma Conta. Cada Conta tem exatamente um Avatar, e ele é o mesmo em todos os Espaços.
+O boneco 2D em cartoon (cabeçudo, traço grosso, só tinta e papel) que representa uma Conta. Cada Conta tem exatamente um Avatar, e ele é o mesmo em todos os Espaços.
 _Avoid_: Personagem, boneco, skin, sprite
 
 **Peça**:
-Uma camada visual que compõe o Avatar — corpo, cabelo, roupa, acessório. Um Avatar é uma combinação de Peças.
+Uma camada visual que compõe o Avatar — corpo, rosto, cabelo, roupa, acessório. Cada Peça tem uma forma e um Preenchimento. Um Avatar é uma combinação de Peças.
 _Avoid_: Item, cosmético, camada
+
+**Preenchimento**:
+Como uma Peça é pintada: papel (branco), tinta (preto) ou uma estampa feita das duas (listra, bolinha). O rosto é sempre papel.
+_Avoid_: Cor, paleta, textura
+
+**Expressão**:
+O rosto do Avatar mudando conforme o que a pessoa faz agora: mexe a boca ao falar, dorme quando ausente, fica de boca fechada enquanto sofre Silenciar. Parte do rosto escolhido como Peça e volta a ele quando o estado acaba.
+_Avoid_: Emoção, emote, reação
+
+**Altura**:
+A estatura do Avatar: baixo, médio ou alto. Muda tronco, pernas e braços. A cabeça tem o mesmo tamanho para todos.
+_Avoid_: Tamanho, escala, proporção
 
 ## Estrutura do Espaço
 
@@ -53,8 +65,20 @@ O propósito de um Lugar (ex.: Foco, Resenha), escolhido ao criá-lo. Define as 
 _Avoid_: Modo, vibe, tipo de sala
 
 **Clima**:
-O tempo real (sol, chuva, nublado, dia/noite) da cidade escolhida para o Espaço. É o mesmo para todos os Membros e aparece nos Lugares abertos e pelas janelas dos fechados.
+O tempo real (céu limpo, nublado, chuva) da cidade escolhida para o Espaço. É o mesmo para todos os Membros e aparece nos Lugares abertos e pelas janelas dos fechados. Não decide se é dia ou noite — isso é o Período.
 _Avoid_: Tempo, weather, ambiente (que é outra coisa)
+
+**Período**:
+A parte do dia no Espaço — dia, tarde ou noite — num ciclo próprio que roda sozinho e não segue o relógio real. É o mesmo para todos os Membros e muda a luz de todos os Lugares.
+_Avoid_: Hora, turno, fase, tema (que é da interface)
+
+**Luz**:
+Estado de um Lugar, acesa ou apagada, igual para todos que estão ali. Acesa, o Lugar fica claro como de dia em qualquer Período; apagada, o Lugar segue o Período. Qualquer Membro presente acende ou apaga, chegando perto do interruptor do Lugar.
+_Avoid_: Iluminação, lâmpada, tema
+
+**Deixa**:
+A tecla que aparece junto de um Móvel quando o Avatar está perto o bastante para usá-lo. Mostra só a tecla, sem texto. Cada Móvel tem um único uso (o interruptor mexe na Luz), então a tecla nunca é ambígua.
+_Avoid_: Interação (que é entre Avatares), ação, atalho, prompt, dica
 
 **Selo de clima**:
 Indicador opcional sobre o Avatar mostrando o clima da cidade de quem o controla. Ativado pela própria Conta.
@@ -83,7 +107,7 @@ Visão que troca o mapa por um mosaico com as Câmeras de todos que estão conve
 _Avoid_: Grid, galeria, modo reunião
 
 **Indicador de atividade**:
-Ícone sobre o Avatar mostrando o que a pessoa está fazendo agora — falando, compartilhando tela, ouvindo música, digitando, ausente.
+Ícone sobre o Avatar mostrando o que a pessoa está fazendo agora e que a Expressão não mostra — digitando, compartilhando tela, ouvindo música, Não perturbe.
 _Avoid_: Status, badge
 
 **Balão**:

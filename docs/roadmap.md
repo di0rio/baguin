@@ -10,6 +10,15 @@ Fatias em ordem de construção. Cada uma é usável sozinha pela galera. Termos
 6. **Progredir** — Nível, Conquista, Inventário, Gestos, Interações, Títulos.
 7. **Mundo real** — Clima, Selo de clima, Presença, Integrações (Cursor/VS Code, Spotify).
 
+## Repaginada visual
+
+Entra antes da fatia 3, para Câmera, Telão e Grade não serem desenhados duas vezes. Direção em [design.md](design.md) e [ADR 0005](adr/0005-arte-cartoon-tinta-e-papel.md).
+
+1. **Interface** — tokens da marca cd, Ubuntu, cd/ui, HUD mínima.
+2. **Avatar e mundo cartoon** — Avatar cabeçudo em tinta e papel, Preenchimento, rosto como Peça, mapa e Móveis em tons de papel.
+3. **Expressão**.
+4. **Período, Luz e Deixa**.
+
 ## Restrições
 
 - **Orçamento zero.** Toda infra precisa caber em plano gratuito ou hospedagem própria. LiveKit Cloud free (5.000 min de conexão/mês, 50GB) não comporta uso diário do grupo — serve só para desenvolvimento.

@@ -4,10 +4,15 @@ import {
   TEMPLATES_LUGAR,
   TILE,
   TIPOS_PAREDE,
+  PES,
+  PE_MEIA_LARG,
+  PE_TOPO,
   alcancePx,
+  baseSolida,
   bloqueado,
   centroTile,
   chaveBloqueio,
+  mover,
   movelSolido,
   pecasSchema,
   PECAS_PADRAO,
@@ -52,25 +57,31 @@ describe("integridade dos mapas", () => {
       for (const z of Object.keys(zonas)) expect(usados.has(z)).toBe(true);
     });
 
-    it(`${t}: spawn livre e todos os pontos livres alcançáveis`, () => {
+    it(`${t}: spawn livre e todo tile livre alcançável com a caixa dos pés`, () => {
       const { x, y } = centroTile(spawn.col, spawn.lin);
       expect(bloqueado(t, x, y)).toBe(false);
-      const visto = new Set([`${spawn.col},${spawn.lin}`]);
-      const fila = [[spawn.col, spawn.lin]];
+      // BFS em passos de 8px: passagens estreitas demais para a caixa dos pés ficam de fora
+      const PASSO = 8;
+      const largura = mapa[0].length * TILE;
+      const altura = mapa.length * TILE;
+      const chave = (px: number, py: number) => py * largura + px;
+      const visto = new Set<number>([chave(x, y)]);
+      const fila: [number, number][] = [[x, y]];
       while (fila.length) {
-        const [c, l] = fila.pop()!;
-        for (const [dc, dl] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-          const k = `${c + dc},${l + dl}`;
-          const ch = mapa[l + dl]?.[c + dc];
-          if (ch && ch !== "#" && ch !== "M" && !visto.has(k)) {
-            visto.add(k);
-            fila.push([c + dc, l + dl]);
-          }
+        const [px, py] = fila.pop()!;
+        for (const [dx, dy] of [[PASSO, 0], [-PASSO, 0], [0, PASSO], [0, -PASSO]]) {
+          const nx = px + dx;
+          const ny = py + dy;
+          if (nx < 0 || ny < 0 || nx >= largura || ny >= altura || visto.has(chave(nx, ny)) || bloqueado(t, nx, ny)) continue;
+          visto.add(chave(nx, ny));
+          fila.push([nx, ny]);
         }
       }
       mapa.forEach((linha, lin) =>
         [...linha].forEach((ch, col) => {
-          if (ch !== "#" && ch !== "M") expect(visto.has(`${col},${lin}`), `${t} ${col},${lin}`).toBe(true);
+          if (ch === "#" || ch === "M") return;
+          const c = centroTile(col, lin);
+          expect(visto.has(chave(c.x, c.y)), `${t} ${col},${lin}`).toBe(true);
         }),
       );
     });
@@ -101,10 +112,13 @@ describe("Móveis", () => {
     const lins = mapa.length;
     const cols = mapa[0].length;
 
-    it(`${t}: os 'M' do mapa são exatamente as pegadas dos Móveis sólidos`, () => {
+    it(`${t}: os 'M' do mapa são os tiles tocados pelas bases dos Móveis sólidos`, () => {
       const esperado = new Set<string>();
-      for (const m of moveis.filter(movelSolido))
-        for (let l = m.lin; l < m.lin + m.alt; l++) for (let c = m.col; c < m.col + m.larg; c++) esperado.add(`${c},${l}`);
+      for (const m of moveis.filter(movelSolido)) {
+        const r = baseSolida(m);
+        for (let l = Math.floor(r.y / TILE); l < Math.ceil((r.y + r.alt) / TILE); l++)
+          for (let c = Math.floor(r.x / TILE); c < Math.ceil((r.x + r.larg) / TILE); c++) esperado.add(`${c},${l}`);
+      }
       const real = new Set<string>();
       mapa.forEach((linha, l) => [...linha].forEach((ch, c) => ch === "M" && real.add(`${c},${l}`)));
       expect([...real].sort()).toEqual([...esperado].sort());
@@ -135,6 +149,15 @@ describe("Móveis", () => {
       }
     });
 
+    it(`${t}: a base sólida fica dentro da pegada e é grande o bastante para ser vista`, () => {
+      for (const m of moveis.filter(movelSolido)) {
+        const r = baseSolida(m);
+        expect(r.x >= m.col * TILE && r.y >= m.lin * TILE, `${m.tipo} ${m.col},${m.lin}`).toBe(true);
+        expect(r.x + r.larg <= (m.col + m.larg) * TILE && r.y + r.alt <= (m.lin + m.alt) * TILE, `${m.tipo} ${m.col},${m.lin}`).toBe(true);
+        expect(r.larg >= 8 && r.alt >= 8, `${m.tipo} ${m.col},${m.lin} fino demais`).toBe(true);
+      }
+    });
+
     it(`${t}: nenhum Móvel sólido cobre a chegada, o spawn ou a frente de uma porta`, () => {
       const { spawn } = TEMPLATES_LUGAR[t];
       expect(mapa[spawn.lin][spawn.col]).not.toBe("M");
@@ -157,10 +180,60 @@ describe("bloqueio e portas", () => {
     expect(bloqueado("sala", 9999, 9999)).toBe(true);
   });
 
-  it("caixa de colisão pega tile vizinho", () => {
-    // encostado na parede esquerda: centro no tile 1 mas caixa invade o tile 0
-    expect(bloqueado("sala", TILE + 5, 6.5 * TILE)).toBe(true);
-    expect(bloqueado("sala", TILE + 11, 6.5 * TILE)).toBe(false);
+  it("a colisão é a faixa dos pés: PE_MEIA_LARG para cada lado, de y + PE_TOPO até a sola em y + PES", () => {
+    const y = 6.5 * TILE;
+    // encostado na parede esquerda: a faixa invade o tile 0 por 1px, e a 0px de folga não
+    expect(bloqueado("sala", TILE + PE_MEIA_LARG - 1, y)).toBe(true);
+    expect(bloqueado("sala", TILE + PE_MEIA_LARG, y)).toBe(false);
+    // o corpo (acima da faixa dos pés) pode estar dentro do Móvel: só os pés contam
+    const sofa = baseSolida(TEMPLATES_LUGAR.sala.moveis.find((m) => m.tipo === "sofa" && m.variante === "costas")!);
+    const x = sofa.x + sofa.larg / 2;
+    const fundo = sofa.y + sofa.alt;
+    expect(bloqueado("sala", x, fundo - PE_TOPO)).toBe(false); // pés logo abaixo da base
+    expect(bloqueado("sala", x, fundo - PE_TOPO - 0.5)).toBe(true); // 0,5px dentro
+    expect(bloqueado("sala", x, sofa.y - PES)).toBe(false); // sola rente ao topo da base
+    expect(bloqueado("sala", x, sofa.y - PES + 0.5)).toBe(true);
+    expect(bloqueado("sala", x, sofa.y - PES - 20)).toBe(false); // corpo atrás do encosto, pés livres
+  });
+
+  it("mover para rente ao obstáculo e desliza em vez de grudar", () => {
+    const sofa = baseSolida(TEMPLATES_LUGAR.sala.moveis.find((m) => m.tipo === "sofa" && m.variante === "costas")!);
+    const x = sofa.x + sofa.larg / 2;
+    // de baixo para cima, passo gigante: para na base do sofá, sem ficar um passo antes
+    const sobe = mover("sala", x, 12.5 * TILE, 0, -200);
+    expect(sobe.y).toBeGreaterThan(sofa.y + sofa.alt - PE_TOPO - 0.1);
+    expect(sobe.y).toBeLessThanOrEqual(sofa.y + sofa.alt - PE_TOPO);
+    expect(bloqueado("sala", sobe.x, sobe.y)).toBe(false);
+    // diagonal contra a parede de cima: o eixo x segue livre
+    const topo = mover("sala", 17.5 * TILE, 3 * TILE, 12, -200);
+    expect(topo.x).toBeCloseTo(17.5 * TILE + 12, 6);
+    expect(topo.y).toBeGreaterThanOrEqual(TILE - PE_TOPO - 0.1); // pés tocam a base da parede (face frontal)
+  });
+
+  it("a parede do fundo deixa os pés encostarem na base da face frontal", () => {
+    const p = mover("sala", 17.5 * TILE, 3 * TILE, 0, -500);
+    expect(p.y + PE_TOPO).toBeGreaterThanOrEqual(TILE);
+    expect(p.y + PE_TOPO).toBeLessThan(TILE + 0.1);
+  });
+
+  it("a porta abre para os pés: dá para entrar sem trombar no batente e dispara com os pés dentro", () => {
+    const { x } = centroTile(14, 0);
+    // subindo pela coluna da porta, os pés entram no tile da porta sem bloqueio
+    const sobe = mover("sala", x, 3 * TILE, 0, -500);
+    expect(sobe.y).toBeLessThan(0);
+    expect(portaEm("sala", x, 3 * TILE)).toBeNull();
+    // o corpo ainda está no tile 1 (y >= TILE) mas os pés já estão na porta: dispara
+    expect(portaEm("sala", x, TILE - 10)).toMatchObject({ digito: "1" });
+    expect(portaEm("sala", x, TILE + 4)).toBeNull();
+    // ao lado da porta é parede
+    expect(bloqueado("sala", x + TILE, 10)).toBe(true);
+    expect(bloqueado("sala", x, 10)).toBe(false);
+  });
+
+  it("zonaEm usa os pés", () => {
+    // Zona 'a' da sala vai até a linha 9 (y < 10 * TILE): corpo no tile 9 com pés no tile 10 está fora
+    expect(zonaEm("sala", 17.5 * TILE, 10 * TILE - 12)).toBe("a");
+    expect(zonaEm("sala", 17.5 * TILE, 10 * TILE - 7)).toBeNull();
   });
 
   it("portaEm acha a porta e o destino", () => {

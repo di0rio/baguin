@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rascunho do Avatar cartoon</title>
+<style>
+:root{--text-primary:#1c1c1c;--text-secondary:#686868;--surface-2:#fff;--border-strong:#0003}
+body{margin:24px auto;max-width:720px;padding:0 16px;font:14px/1.5 Ubuntu,system-ui,sans-serif;color:var(--text-primary);background:#fff}
+h1{font-size:20px;margin:0 0 4px}
+p{margin:0 0 16px;color:var(--text-secondary)}
+button{font:inherit;color:inherit;background:transparent;border:1px solid var(--border-strong);border-radius:8px;cursor:pointer}
+.palco{display:grid;grid-template-columns:minmax(0,250px) minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:560px){.palco{grid-template-columns:minmax(0,1fr)}}
+@keyframes bgbob{to{transform:translateY(-3px)}}
+@keyframes bgleg{to{transform:translateY(-7px)}}
+@keyframes bgarm{from{transform:rotate(-9deg)}to{transform:rotate(9deg)}}
+@keyframes bgsway{from{transform:rotate(-5deg)}to{transform:rotate(5deg)}}
+@keyframes bgwave{from{transform:rotate(40deg)}to{transform:rotate(75deg)}}
+@keyframes bgfala{to{transform:scaleY(.3)}}
+@keyframes bgzz{from{transform:translateY(4px);opacity:.2}to{transform:translateY(-4px);opacity:1}}
+.bgav .bob{animation:bgbob 1.6s ease-in-out infinite alternate}
+.bgav.anda .bob{animation-duration:.3s}
+.bgav.anda .lgA{animation:bgleg .3s ease-in-out infinite alternate}
+.bgav.anda .lgB{animation:bgleg .3s ease-in-out -.3s infinite alternate}
+.bgav .arA{transform-box:fill-box;transform-origin:50% 0}
+.bgav.anda .arA{animation:bgarm .3s ease-in-out infinite alternate}
+.bgav.danca .bob{transform-box:fill-box;transform-origin:50% 100%;animation:bgsway .42s ease-in-out infinite alternate}
+.bgav.danca .arA{animation:bgwave .42s ease-in-out infinite alternate}
+.bgav.danca .lgA{animation:bgleg .42s ease-in-out infinite alternate}
+.bgav.danca .lgB{animation:bgleg .42s ease-in-out -.42s infinite alternate}
+.bgav .fala{transform-box:fill-box;transform-origin:center;animation:bgfala .16s ease-in-out infinite alternate}
+.bgav .zz{animation:bgzz 1.2s ease-in-out infinite alternate}
+@media (prefers-reduced-motion:reduce){.bgav *{animation:none!important}}
+</style>
+</head>
+<body>
+<h1>Rascunho do Avatar cartoon</h1>
+<p>Referência de proporção e traço aprovada em 2026-10-07. Não é arte final. Decisões em docs/design.md e docs/adr/0005-arte-cartoon-tinta-e-papel.md.</p>
+<div class="palco">
+<div id="bgst" style="border-radius:12px;padding:14px 12px 12px;background:#F6F4EE;min-height:420px"></div>
+<div id="bgct" style="display:flex;flex-direction:column;gap:10px"></div>
+</div>
+<script>
+(function(){
+const O={cab:['espetado','redondo','longo','chanel','tigela','coque','moicano','careca'],cabP:['papel','tinta'],rouP:['papel','tinta','listra','bolinha','xadrez'],calP:['papel','tinta'],ace:['nenhum','óculos','boné','fone','touca'],ros:['sono','feliz','bravo','sorrisão','desconfiado','fofo'],exp:['nenhuma','falando','ausente','silenciado','susto'],mun:['dia','tarde','noite'],mov:['parado','andando','dançando'],alt:['baixo','médio','alto']};
+const H={
+espetado:{b:'M50 149C29 128 29 89.5 46.5 68.5L29 54.5L57 54.5C71 33.5 95.5 23 116.5 26.5L123.5 9L137.5 28C165.5 26.5 190 40.5 200.5 65L221.5 58L207.5 82.5C218 107 211 135 193.5 152.5Z',f:'M66 84L80 118L92 100L106 124L120 102L134 124L148 100L160 118L174 84',u:'M62 84L38 78L50 98L34 110L54 118C52 134 56 144 62 152L178 152C184 144 188 134 186 118L206 110L190 98L202 78L178 84Z',t:16},
+redondo:{b:'M43 100a77 77 0 1 0 154 0a77 77 0 1 0 -154 0Z',f:'M66 84Q120 132 174 84',u:'M60 84C36 90 38 146 68 160L172 160C202 146 204 90 180 84Z',t:15},
+longo:{b:'M44 198C32 120 43 26 120 26C197 26 208 120 196 198Z',f:'M66 84C92 128 150 116 174 84',u:'M62 82C40 112 36 160 44 198L196 198C204 160 200 112 178 82Z',t:18},
+chanel:{b:'M46 168C32 104 48 28 120 28C192 28 208 104 194 168Z',f:'M66 84V108H174V84',u:'M62 82C40 104 38 142 46 168L194 168C202 142 200 104 178 82Z',t:20},
+tigela:{b:'M58 112C50 56 84 30 120 30C156 30 190 56 182 112Z',f:'M66 84Q68 112 120 112Q172 112 174 84',u:'M60 84C56 96 56 106 58 112L182 112C184 106 184 96 180 84Z',t:22},
+coque:{b:'M60 108C52 58 84 34 120 34C156 34 188 58 180 108Z',f:'M66 84Q93 98 120 86Q147 98 174 84',x:'<circle cx="120" cy="24" r="17"/>',u:'M60 84C56 94 58 104 60 108L180 108C182 104 184 94 180 84Z',t:26},
+moicano:{d:1,c:'M108 100C102 76 97 50 104 30C108 16 132 16 136 30C143 50 138 76 132 100Z',t:38},
+careca:{d:1,t:38}};
+const DOME='M66 86C60 150 85 184 120 184C155 184 180 150 174 86C174 60 152 44 120 44C88 44 66 60 66 86Z',FACE='M66 84C60 150 85 184 120 184C155 184 180 150 174 84';
+const BG={dia:'#F6F4EE',tarde:'#DDD6C4',noite:'#1C1C1C'},SH={dia:'#DDD8CA',tarde:'#C4BCA8',noite:'#101010'};
+const f=v=>v==='tinta'?'#000':'#FFF';
+function rosto(S,s){
+let e='',m='';const d=(x,y,r)=>'<circle cx="'+x+'" cy="'+y+'" r="'+r+'" fill="#000" stroke="none"/>';
+if(S.ros==='sono'){e='<path d="M90 138h20M130 138h20" stroke-width="'+s(6)+'"/><path d="M93.5 138a6.5 6.5 0 0 0 13 0zM133.5 138a6.5 6.5 0 0 0 13 0z" fill="#000" stroke-width="2"/><path d="M93 151q7 4 14 0M133 151q7 4 14 0" stroke-width="'+s(3)+'"/>';m='<path d="M107 165q6 -5 13 0q6 5 13 -2" stroke-width="'+s(5)+'"/>';}
+if(S.ros==='feliz'){e=d(100,139,6)+d(140,139,6);m='<path d="M105 160q15 13 30 0" stroke-width="'+s(5)+'"/>';}
+if(S.ros==='bravo'){e='<path d="M88 126l22 8M152 126l-22 8" stroke-width="'+s(6)+'"/>'+d(101,144,5)+d(139,144,5);m='<path d="M107 169q13 -9 26 0" stroke-width="'+s(5)+'"/>';}
+if(S.ros==='sorrisão'){e='<path d="M90 143q10 -11 20 0M130 143q10 -11 20 0" stroke-width="'+s(5)+'"/>';m='<path d="M104 158h32q-4 18 -16 18q-12 0 -16 -18z" fill="#000" stroke-width="'+s(4)+'"/>';}
+if(S.ros==='desconfiado'){e='<path d="M90 137h20" stroke-width="'+s(6)+'"/>'+d(101,144,4)+'<path d="M130 127q10 -7 20 0" stroke-width="'+s(5)+'"/>'+d(140,140,5.5);m='<path d="M108 168l24 -5" stroke-width="'+s(5)+'"/>';}
+if(S.ros==='fofo'){e=d(99,140,9)+d(141,140,9)+'<circle cx="96" cy="137" r="3" fill="#FFF" stroke="none"/><circle cx="138" cy="137" r="3" fill="#FFF" stroke="none"/>';m='<path d="M113 162q7 7 14 0" stroke-width="'+s(4)+'"/>';}
+if(S.exp==='falando')m='<ellipse class="fala" cx="120" cy="164" rx="10" ry="8" fill="#000" stroke="none"/>';
+if(S.exp==='ausente'){e='<path d="M90 139q10 7 20 0M130 139q10 7 20 0" stroke-width="'+s(5)+'"/>';m='<path d="M113 165h14" stroke-width="'+s(5)+'"/>';}
+if(S.exp==='silenciado')m='<path d="M102 165h36" stroke-width="'+s(5)+'"/><path d="M109 159v12M117 159v12M125 159v12M133 159v12" stroke-width="'+s(3)+'"/>';
+if(S.exp==='susto'){e='<circle cx="100" cy="138" r="11" fill="#FFF" stroke-width="'+s(5)+'"/><circle cx="140" cy="138" r="11" fill="#FFF" stroke-width="'+s(5)+'"/>'+d(100,138,3.5)+d(140,138,3.5);m=d(120,166,6);}
+return '<g fill="none">'+e+m+'</g>';
+}
+function svg(S,w,k){
+const s=n=>(n*k).toFixed(1);
+const A={baixo:[28,54],'médio':[36,60],alto:[46,66]}[S.alt||'médio'],lh=A[0]+8,th=A[1],dy=272-A[0]-th-176;
+const BODY='<rect x="90" y="176" width="60" height="'+th+'" rx="20"',UP='<g transform="translate(0 '+dy+')">';
+const n=S.mun==='noite',hc=f(S.cabP),rc=S.rouP==='tinta'?'#000':'#FFF',cc=f(S.calP),h=H[S.cab],hat=S.ace==='boné'||S.ace==='touca';
+const ac=h.d?'#000':(hc==='#000'?'#FFF':'#000'),ai=ac==='#000'?'#FFF':'#000';
+const leg=(c,x,a)=>'<g class="'+c+'"><rect x="'+x+'" y="'+(272-lh)+'" width="18" height="'+lh+'" rx="8"'+a+'/></g>';
+const legs=a=>leg('lgA',98,a)+leg('lgB',124,a);
+const arm=r=>'<g transform="rotate(4 83 184)"><g class="arA"><rect x="74" y="182" width="18" height="'+lh+'" rx="8"'+(r?' fill="#FFF"':'')+'/></g></g>';
+const arms=r=>arm(r)+'<g transform="translate(240 0) scale(-1 1)">'+arm(r)+'</g>';
+const hair=a=>h.d?'':hat?'<path d="'+h.u+'"'+a+'/>':(h.x?h.x.replace('/>',a+'/>'):'')+'<path d="'+h.b+'"'+a+'/>';
+const ears=a=>'<path d="M66 128C51 124 49 150 67 150"'+a+'/><path d="M174 128C189 124 191 150 173 150"'+a+'/>';
+const acc=r=>{
+const a=r?' fill="'+ac+'"':'';
+if(S.ace==='óculos')return r?'<g fill="none" stroke-width="'+s(5)+'"><circle cx="100" cy="140" r="15"/><circle cx="140" cy="140" r="15"/><path d="M115 138q5 -4 10 0M85 137L67 131M155 137L173 131"/></g>':'';
+if(S.ace==='boné')return '<path d="M64 80C60 40 92 20 120 20C148 20 180 40 176 80Z"'+a+'/><path d="M56 80Q120 72 184 80Q182 102 120 104Q58 102 56 80Z"'+a+'/>'+(r?'<circle cx="120" cy="20" r="5" fill="'+ac+'" stroke-width="'+s(5)+'"/>':'');
+if(S.ace==='fone'){const b='M53 132C46 70 78 '+h.t+' 120 '+h.t+'C162 '+h.t+' 194 70 187 132';const tb=r&&ac==='#FFF';return '<path d="'+b+'" fill="none"'+(r?' stroke-width="'+s(tb?13:8)+'"':'')+'/>'+(tb?'<path d="'+b+'" fill="none" stroke="#FFF" stroke-width="'+s(5)+'"/>':'')+'<rect x="41" y="114" width="24" height="42" rx="11"'+a+'/><rect x="175" y="114" width="24" height="42" rx="11"'+a+'/>';}
+if(S.ace==='touca')return '<circle cx="120" cy="16" r="11"'+a+'/><path d="M62 90C58 40 90 22 120 22C150 22 182 40 178 90Z"'+a+'/><rect x="56" y="76" width="128" height="24" rx="11"'+a+'/>'+(r?'<path d="M80 82v12M100 82v12M120 82v12M140 82v12M160 82v12" fill="none" stroke="'+ai+'" stroke-width="'+s(3)+'"/>':'');
+return '';
+};
+let pat='';
+if(S.rouP==='listra')pat='<rect x="86" y="189" width="68" height="8"/><rect x="86" y="205" width="68" height="8"/><rect x="86" y="221" width="68" height="8"/><rect x="86" y="237" width="68" height="8"/>';
+if(S.rouP==='bolinha')pat=[[105,192],[122,192],[139,192],[113,207],[131,207],[105,222],[122,222],[139,222],[113,237],[131,237]].map(p=>'<circle cx="'+p[0]+'" cy="'+p[1]+'" r="4.5"/>').join('');
+if(S.rouP==='xadrez')pat='<path d="M84 192H156M84 206H156M84 220H156M84 234H156M105 172V250M120 172V250M135 172V250" fill="none" stroke="#000" stroke-width="3"/>';
+if(pat)pat='<g clip-path="url(#bgcb)" fill="#000" stroke="none">'+pat+'</g>';
+const crest=h.c&&!hat;
+const head=h.d?'<path d="'+DOME+'" fill="#FFF"/>'+(crest?'<path d="'+h.c+'" fill="'+hc+'"/>':''):'<path d="'+FACE+'" fill="#FFF"/><path d="'+h.f+'L170 62L70 62Z" fill="'+hc+'" stroke="none"/><path d="'+h.f+'" fill="none"/>';
+const halo=n?'<g stroke="#FFF" stroke-width="'+s(18)+'" fill="#FFF">'+legs('')+'<g class="bob">'+UP+hair('')+arms(false)+BODY+'/>'+ears('')+'<path d="'+(h.d?DOME:FACE+'Z')+'"/>'+(crest?'<path d="'+h.c+'"/>':'')+acc(false)+'</g></g></g>':'';
+return '<svg class="bgav'+(S.mov==='andando'?' anda':S.mov==='dançando'?' danca':'')+'" width="'+w+'" viewBox="0 -20 240 310" role="img" aria-label="Avatar" stroke="#000" stroke-width="'+s(7)+'" stroke-linejoin="round" stroke-linecap="round" style="display:block;overflow:visible"><defs><clipPath id="bgcb">'+BODY+'/></clipPath></defs>'
++'<ellipse cx="120" cy="274" rx="54" ry="9" fill="'+SH[S.mun]+'" stroke="none"/>'
++halo
++legs(' fill="'+cc+'"')
++'<g class="bob">'+UP+hair(' fill="'+hc+'"')+arms(true)
++BODY+' fill="'+rc+'" stroke="none"/>'+pat+BODY+' fill="none"/>'
++ears(' fill="#FFF"')+head+rosto(S,s)+acc(true)+'</g></g>'
++(S.exp==='ausente'?UP+'<g class="zz" fill="none" stroke="'+(n?'#FFF':'#000')+'" stroke-width="'+s(5)+'"><path d="M204 30h13l-13 15h13"/><path d="M222 8h10l-10 11h10"/></g></g>':'')
++'</svg>';
+}
+const S={cab:'espetado',cabP:'tinta',rouP:'listra',calP:'tinta',ace:'nenhum',ros:'sono',exp:'nenhuma',mun:'dia',mov:'parado',alt:'médio'};
+const R=[['Cabelo',['cab','cabP']],['Roupa',['rouP']],['Calça',['calP']],['Altura',['alt']],['Acessório',['ace']],['Rosto',['ros']],['Expressão',['exp']],['Período',['mun']],['Movimento',['mov']]];
+const st=document.getElementById('bgst'),ct=document.getElementById('bgct'),B=[];
+const bs='font-size:13px;padding:3px 9px',ls='font-size:12px;color:var(--text-secondary);margin-bottom:4px';
+R.forEach(([lab,keys])=>{
+const r=document.createElement('div'),l=document.createElement('div'),g=document.createElement('div');
+l.textContent=lab;l.style.cssText=ls;
+g.style.cssText='display:flex;flex-wrap:wrap;gap:6px;align-items:center';
+keys.forEach((k,i)=>{
+if(i){const d=document.createElement('span');d.style.cssText='width:1px;height:18px;background:var(--border-strong);margin:0 2px';g.appendChild(d)}
+O[k].forEach(v=>{const b=document.createElement('button');b.textContent=v;b.style.cssText=bs;b.onclick=()=>{S[k]=v;go()};B.push([b,k,v]);g.appendChild(b)});
+});
+r.appendChild(l);r.appendChild(g);ct.appendChild(r);
+});
+const x=document.createElement('div');x.style.cssText='display:flex;flex-wrap:wrap;gap:6px;margin-top:6px';
+const a=document.createElement('button');a.textContent='Aleatório';a.style.cssText=bs;a.onclick=()=>{['cab','cabP','rouP','calP','alt','ace','ros'].forEach(k=>{S[k]=O[k][Math.floor(Math.random()*O[k].length)]});go()};
+x.appendChild(a);ct.appendChild(x);
+function draw(){
+const n=S.mun==='noite';
+st.style.background=BG[S.mun];
+st.innerHTML=svg(S,'100%',1)+'<div style="display:flex;align-items:flex-end;gap:14px;margin-top:10px">'+svg(S,80,1.45)+svg(S,52,1.45)+'<span style="font-size:12px;color:'+(n?'#9A9A94':'#5F5B50')+'">tamanho no mundo, traço mais grosso</span></div>';
+}
+function go(){
+draw();
+B.forEach(([b,k,v])=>{const s=S[k]===v;b.setAttribute('aria-pressed',s);b.style.background=s?'var(--text-primary)':'';b.style.color=s?'var(--surface-2)':'';b.style.borderColor=s?'var(--text-primary)':''});
+}
+go();
+})();
+</script>
+</body>
+</html>

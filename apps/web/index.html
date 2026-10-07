@@ -6,12 +6,19 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Geist na interface; Inter só nos textos desenhados no Phaser (rotulos.ts) -->
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Inter:wght@500;600;700&display=swap"
       rel="stylesheet"
     />
-    <meta name="theme-color" content="#F7F5F4" />
+    <meta name="theme-color" content="#f5f5f5" />
     <title>Baguin</title>
+    <script>
+      // aplica o tema salvo antes da primeira pintura (padrão: claro)
+      try {
+        if (localStorage.getItem("baguin-tema") === "dark") document.documentElement.classList.add("dark");
+      } catch {}
+    </script>
   </head>
   <body>
     <div id="raiz"></div>

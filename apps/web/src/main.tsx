@@ -2,12 +2,21 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router";
 import { App } from "./App";
-import "./estilo.css";
+import { ToastProvider } from "./components/ui/toast";
+import { TooltipProvider } from "./components/ui/tooltip";
+import { TemaProvider } from "./tema";
+import "./globais.css";
 
 createRoot(document.getElementById("raiz")!).render(
   <StrictMode>
     <BrowserRouter>
-      <App />
+      <TemaProvider>
+        <TooltipProvider delay={350} timeout={400}>
+          <ToastProvider position="top-center">
+            <App />
+          </ToastProvider>
+        </TooltipProvider>
+      </TemaProvider>
     </BrowserRouter>
   </StrictMode>,
 );
