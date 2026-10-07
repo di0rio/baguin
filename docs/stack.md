@@ -15,7 +15,7 @@ Decisões técnicas. Termos seguem o [CONTEXT.md](../CONTEXT.md); restrições n
 | Banco | Neon (Postgres, free) | 0,5GB, 100 CU-h/mês, dorme após 5 min |
 | ORM | Drizzle | Padrão adotado, leve, TypeScript |
 | Imagens | Cloudflare R2 (free) | Só a partir da fatia Morar |
-| Repositório | Monorepo pnpm: `apps/web`, `apps/server`, `packages/shared` | Tipos do estado compartilhados entre cliente e servidor |
+| Repositório | Monorepo Bun (workspaces): `apps/web`, `apps/server`, `packages/shared` | Tipos do estado compartilhados entre cliente e servidor |
 
 ## Regras do banco (por causa do free do Neon)
 

@@ -78,7 +78,7 @@ Antes da fatia 3 do roadmap.
 - **Tailwind v4** (`@tailwindcss/vite`), tokens em `apps/web/src/globais.css`.
 - **coss ui** (Base UI + `cva`): componentes copiados em `apps/web/src/components/ui/` (Button, Input, InputGroup, Field, Form, Tabs, Toggle, ToggleGroup, Toolbar, Tooltip, Menu, Dialog, AlertDialog, Sheet, Toast, Empty, Avatar, Badge, Kbd, Alert, Skeleton, Spinner, Separator, ScrollArea). Use esses antes de inventar markup; `cn()` em `src/lib/utils.ts`.
 - Peças próprias do Baguin em `src/components/`: `cabecalho` (cabeçalho, `Pagina`, `Topo`, `BotaoTema`), `marca`, `avatar-mini`, `capa-espaco`, `estado-pagina`, `erro`, `carregando`.
-- `.pnpmfile.cjs` tira o `jiti` dos peers do vite: sem isso o pnpm duplica o `@colyseus/core` ao instalar o Tailwind e o matchmaking quebra.
+- `bunfig.toml` usa `linker = "hoisted"`: uma cópia só do `@colyseus/core`. Duas cópias quebram o matchmaking ("seat reservation expired").
 
 ## Tema
 

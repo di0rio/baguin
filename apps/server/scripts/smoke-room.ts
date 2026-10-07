@@ -1,5 +1,5 @@
-// Smoke test ponta a ponta: API + room `lugar`. Requer o servidor rodando (pnpm --filter @baguin/server start).
-// Uso: pnpm --filter @baguin/server smoke
+// Smoke test ponta a ponta: API + room `lugar`. Requer o servidor rodando (bun run --filter @baguin/server start).
+// Uso: bun run --filter @baguin/server smoke
 import { Client, type Room } from "@colyseus/sdk";
 import { CODIGO_BANIDO, CODIGO_DUPLICADO, CODIGO_REMOVIDO, NOME_ROOM, TILE, centroTile, type EntrarOpcoes, type PassagemMsg } from "@baguin/shared";
 

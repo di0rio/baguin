@@ -1,0 +1,4 @@
+[install]
+# Instala tudo achatado na raiz do node_modules: garante uma cópia só do @colyseus/core
+# (duas cópias quebram o matchmaking com "seat reservation expired").
+linker = "hoisted"

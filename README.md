@@ -4,15 +4,15 @@ Espaço virtual 2D pra galera: cada um com seu Avatar, andando pelos Lugares, co
 
 ## Rodar local
 
-Precisa de Node 22+ e pnpm 10. Nenhuma conta em serviço externo.
+Precisa de Node 22+ e Bun 1.3. Nenhuma conta em serviço externo.
 
 ```bash
-pnpm install
+bun install
 cp apps/server/.env.example apps/server/.env
-pnpm dev
+bun dev
 ```
 
-Abre http://localhost:5173. O `pnpm dev` sobe:
+Abre http://localhost:5173. O `bun dev` sobe:
 
 | Processo | Porta | O quê |
 |---|---|---|
@@ -44,8 +44,8 @@ Os botões de Discord e Google só aparecem na tela de entrada quando as duas va
 
 Web no Cloudflare Pages, servidor (API + Colyseus) numa VM da Oracle atrás de HTTPS.
 
-- **Web (Cloudflare Pages)**: projeto com raiz em `apps/web`, build `pnpm --filter @baguin/web build`, saída `dist`. Defina a env `API_ORIGIN` (ex.: `https://api.exemplo.com`, a URL HTTPS do servidor): a Pages Function `apps/web/functions/api/[[path]].ts` repassa `/api/*` pra ela, então o navegador só enxerga a origem do Pages e os cookies de sessão ficam same-origin. O Pages já serve `index.html` nas rotas do app (sem `404.html`).
-- **Servidor (Oracle VM)**: `pnpm --filter @baguin/server start` (já roda com `NODE_ENV=production`). Coloque atrás de HTTPS, por exemplo Caddy (`api.exemplo.com { reverse_proxy localhost:2567 }`), que também cobre o WebSocket do Colyseus.
+- **Web (Cloudflare Pages)**: projeto com raiz em `apps/web`, build `bun run --filter @baguin/web build`, saída `dist`. Defina a env `API_ORIGIN` (ex.: `https://api.exemplo.com`, a URL HTTPS do servidor): a Pages Function `apps/web/functions/api/[[path]].ts` repassa `/api/*` pra ela, então o navegador só enxerga a origem do Pages e os cookies de sessão ficam same-origin. O Pages já serve `index.html` nas rotas do app (sem `404.html`).
+- **Servidor (Oracle VM)**: `bun run --filter @baguin/server start` (já roda com `NODE_ENV=production`). Coloque atrás de HTTPS, por exemplo Caddy (`api.exemplo.com { reverse_proxy localhost:2567 }`), que também cobre o WebSocket do Colyseus.
 - **`apps/server/.env`**:
   - `NODE_ENV=production` (o `start` já define; o servidor não sobe em produção com `BETTER_AUTH_SECRET` ausente, padrão ou com menos de 32 caracteres);
   - `BETTER_AUTH_SECRET`: gere com `openssl rand -base64 32`;
@@ -59,12 +59,12 @@ Web no Cloudflare Pages, servidor (API + Colyseus) numa VM da Oracle atrás de H
 ## Comandos
 
 ```bash
-pnpm dev          # tudo
-pnpm typecheck    # tipos em todos os pacotes
-pnpm test         # testes (regras de conversa, mapas, renderizador, voz)
-pnpm livekit      # só o LiveKit local
-pnpm --filter @baguin/server db:generate   # depois de mudar apps/server/src/db/schema.ts
-pnpm --filter @baguin/server smoke         # smoke test das rooms (com o server rodando)
+bun dev           # tudo
+bun typecheck     # tipos em todos os pacotes
+bun run test      # testes (regras de conversa, mapas, renderizador, voz)
+bun livekit       # só o LiveKit local
+bun run --filter @baguin/server db:generate   # depois de mudar apps/server/src/db/schema.ts
+bun run --filter @baguin/server smoke         # smoke test das rooms (com o server rodando)
 ```
 
 ## Estrutura

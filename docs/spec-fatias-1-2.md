@@ -31,7 +31,7 @@ packages/shared Tipos, catálogo de Peças, templates de Lugar, regras de conver
 scripts/        livekit-dev.sh (baixa livekit-server para tools/ se faltar e roda --dev)
 ```
 
-Dev: `pnpm dev` na raiz sobe server (:2567) e web (:5173). Vite faz proxy de `/api` → `http://localhost:2567` (cookies de sessão ficam same-origin). O cliente Colyseus conecta direto em `VITE_COLYSEUS_URL` (padrão `http://localhost:2567`) e se autentica por **ingresso** (token), não por cookie.
+Dev: `bun dev` na raiz sobe server (:2567) e web (:5173). Vite faz proxy de `/api` → `http://localhost:2567` (cookies de sessão ficam same-origin). O cliente Colyseus conecta direto em `VITE_COLYSEUS_URL` (padrão `http://localhost:2567`) e se autentica por **ingresso** (token), não por cookie.
 
 ## Modelo de dados (Drizzle)
 
@@ -151,8 +151,8 @@ Câmera, Transmissão, Telão, Grade, Rádio, Quarto, Mural, Nível, Clima, Pres
 
 ## Critérios de pronto
 
-1. `pnpm install && pnpm dev` sobe tudo sem nenhuma variável de ambiente além do `.env.example` copiado.
+1. `bun install && bun dev` sobe tudo sem nenhuma variável de ambiente além do `.env.example` copiado.
 2. Duas abas (duas Contas de dev): cadastro → Avatar → criar Espaço → gerar Convite → segunda Conta aceita → os dois se veem andando no mesmo Lugar, trocam Balões, atravessam portas.
 3. Balão respeita Alcance/Zona/Não perturbe/Bloqueio.
 4. Moderação: silenciar corta Balão; remover e banir derrubam e impedem volta pelo mesmo Convite (banir).
-5. `pnpm typecheck` e `pnpm test` passam.
+5. `bun typecheck` e `bun run test` passam.
