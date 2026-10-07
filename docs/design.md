@@ -2,6 +2,77 @@
 
 Referência: o site do blog (Tailwind v4 + coss ui sobre Base UI). Interface limpa, neutra e moderna, com um único acento índigo. Pixel art só no mundo e nos Avatares; a interface nunca usa fonte pixelada.
 
+## Direção nova (decidida em 2026-10-07, ainda não implementada)
+
+O restante deste documento descreve o que está no código hoje. Esta seção registra a repaginada combinada; cada parte substitui a seção correspondente quando a entrega entrar. Motivo e alternativas da arte na [ADR 0005](adr/0005-arte-cartoon-tinta-e-papel.md). Termos novos no [CONTEXT.md](../CONTEXT.md): Preenchimento, Expressão, Período, Luz, Deixa.
+
+### Marca
+
+- Baguin é marca endossada pela cd: nome e logo próprios, redesenhados no traço da cd, com a assinatura "feito por cd" no rodapé e na tela de entrar. O boneco da cd só aparece na assinatura.
+- Referências vivas: cd-ui.vercel.app e cauadiorio.vercel.app. O kit da marca (guia, SVGs, favicon) fica fora do repo.
+- Tokens: tinta `#000000`, papel `#FFFFFF`, fundo `#1C1C1C`, amarelo `#FFD23F`. Papel creme `#F6F4EE` e cartão `#FBFAF6` / `#222220`, como nos sites.
+- Tipografia: Ubuntu na interface e nos textos do mundo (saem Geist e Inter), Ubuntu Mono em teclas. Títulos em minúsculas.
+- Amarelo só em quatro casos: ação principal, estado ativo (microfone ligado, falando), Móvel alcançável e Zona onde você está.
+
+### Avatar
+
+- Cartoon cabeçudo (referência: Don't Starve Together): boneco de recorte em pé, com animação de marionete no lugar dos três quadros. Da referência ficam a proporção e o recorte; não ficam o traço rabiscado, a paleta sépia nem o clima sombrio.
+- Duas tintas. Cabelo, roupa e calça escolhem o Preenchimento: papel, tinta ou estampa (listra, bolinha). O rosto é sempre papel.
+- O rosto é Peça (olhos e boca), com a cara de sono da marca como padrão, e reage ao estado (Expressão): a boca mexe ao falar, o Avatar dorme quando ausente e fica de zíper na boca enquanto sofre Silenciar. O Indicador de atividade em ícone fica só para digitando, Transmissão, Rádio e Não perturbe.
+- O Editor de Avatar troca as amostras de cor por forma, Preenchimento e estampa, e ganha a categoria rosto.
+
+Base aprovada no rascunho interativo [rascunhos/avatar.html](rascunhos/avatar.html). É referência de proporção e traço, não arte final.
+
+- Cabeça de tamanho único para todos. Só a Altura muda (baixo, médio, alto), mexendo em tronco, pernas e braços.
+- Tronco é um bloco arredondado único com o Preenchimento da roupa, sem camisa por cima nem manga.
+- Perna é um tubo arredondado, sem pé nem sapato.
+- Braço é igual à perna: mesmo tubo, mesma grossura e mesmo comprimento. Cai reto, colado ao tronco, sem mão separada e sem dedo. No rascunho é sempre papel.
+- Marionete: parado respira, andando alterna as pernas e balança os braços, e o Gesto de dançar inclina o tronco e levanta os braços.
+- Acessório depende do cabelo. Boné e touca trocam o cabelo por uma versão de baixo do chapéu (tufos de lado, volume estufado, cabelo caindo) e escondem coque e moicano. O arco do fone acompanha a altura do cabelo e vira tubo claro sobre cabelo em tinta. A cor do acessório é sempre o contrário da do cabelo.
+- No tamanho do mundo o traço é desenhado mais grosso em proporção (45% no rascunho), senão olheira e boca somem.
+- Estampas do rascunho: listra, bolinha e xadrez. Bolinha e xadrez ainda viram ruído em tamanho pequeno.
+
+### Mundo
+
+- Mapa e Móveis no mesmo traço, em tons de papel: parede mais clara, chão creme, sombra chapada mais escura. Marca de material em traço fino e rara (três riscos de tábua, não o piso inteiro). Hachura só em uso pontual.
+- Período (dia, tarde, noite) em ciclo próprio, igual para todos, derivado do relógio do servidor. Padrão: 60 min (30 / 10 / 20), com transição lenta.
+- Luz por Lugar: acesa deixa o Lugar claro como de dia; apagada segue o Período. Qualquer Membro mexe no interruptor (Móvel de parede), com trava de 2 s entre trocas. Lugar vazio volta para acesa, e o estado vive só na memória da room. Lugar aberto não tem interruptor: as `luzinhas` acendem sozinhas à noite.
+- No escuro só o cenário muda (`#1C1C1C` e vizinhos). Avatares e Móveis mantêm o Preenchimento, com contorno externo de papel.
+- Deixa: só a tecla (`e`), sem texto, junto do Móvel alcançável, que ganha contorno amarelo. Um Móvel, um uso. No toque, o próprio Móvel é o alvo.
+
+### Interface
+
+- Componentes: cd/ui no lugar de coss ui, páginas de entrada incluídas. Faltam no cd/ui e nascem lá: `sheet`, `alert-dialog`, `empty` e `toggle`. `toolbar`, `toggle-group`, `scroll-area` e `input-group` deixam de ser necessários (HUD mínima, Radio Group no editor, markup simples).
+- Tema claro ou escuro é escolha da pessoa, com escuro como padrão. O mundo não segue o tema: segue Período e Luz.
+- HUD mínima: fixos só o microfone e a pílula de local. Não perturbe, Membros e Convites ficam num menu ao lado do microfone, com atalho. O Balão abre com Enter, sem botão.
+- A HUD segue o tema: no escuro, sólido escuro com borda clara de 1,5 px; no claro, adesivo (papel com contorno de tinta). Sem vidro, blur ou sombra suave. Balão, etiqueta de nome e rótulo de Zona na mesma língua.
+- Fora do mundo: tom alto na chegada (Entrar, Convite, estados vazios e cards de Espaço, com contorno grosso e sombra dura amarela) e baixo em formulário e lista.
+
+### Movimento
+
+- Deixa: entra com opacidade e escala de 0,96 a 1 em 160 ms, ease-out forte, a partir do lado do Móvel. Sai em 120 ms.
+- Tecla apertada: efeito imediato, sem animação de interface. A tecla afunda (escala 0,97, 100 ms).
+- O capricho fica no mundo: a Luz pisca uma vez e firma em menos de 200 ms, e os Avatares do Lugar arregalam o olho por meio segundo.
+- Durações nos tokens do cd/ui (80, 120, 160 e 240 ms). Só `transform` e `opacity`. Movimento reduzido cai para opacidade.
+
+### Ordem de entrega
+
+Antes da fatia 3 do roadmap.
+
+1. Interface: tokens, Ubuntu, cd/ui e HUD mínima.
+2. Avatar e mundo cartoon juntos, com o Editor de Avatar novo e a migração das Peças.
+3. Expressão.
+4. Período, Luz e Deixa.
+
+### Em aberto
+
+- Logo do Baguin no traço da cd.
+- Catálogo final de formas, estampas e rostos. O rascunho tem 8 cabelos, 6 rostos e 4 acessórios.
+- Braço sempre papel, como no rascunho, ou seguindo o Preenchimento da roupa.
+- Quantas vistas o Avatar tem (frente, costas, lado espelhado). O rascunho só tem a de frente.
+- Diferença de Altura entre baixo e alto, pequena no rascunho.
+- Duração final do ciclo do Período.
+
 ## Stack visual
 
 - **Tailwind v4** (`@tailwindcss/vite`), tokens em `apps/web/src/globais.css`.
