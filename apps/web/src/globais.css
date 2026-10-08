@@ -2,11 +2,11 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Tokens no mesmo formato do blog (coss + Base UI): ver docs/design.md */
+/* Tema do cd/ui (https://cd-ui.vercel.app/r/theme.json) + tinta e papel do Baguin: ver docs/design.md */
 @theme {
-  --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-sans: "Ubuntu", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-heading: var(--font-sans);
-  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+  --font-mono: "Ubuntu Mono", ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -14,99 +14,154 @@
   --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
-  --color-warning: var(--warning);
-  --color-warning-foreground: var(--warning-foreground);
-  --color-info: var(--info);
-  --color-info-foreground: var(--info-foreground);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-brand-contrast: var(--brand-contrast);
+  /* tinta e papel puros: HUD em adesivo, rótulos e Balão */
+  --color-tinta: #000000;
+  --color-papel: #ffffff;
 
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
+  --radius-xs: 4px;
+  --radius-sm: calc(var(--radius) * 0.5);
+  --radius-md: calc(var(--radius) * 0.75);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  --radius-xl: calc(var(--radius) * 1.5);
+  --radius-2xl: calc(var(--radius) * 2);
 
-  /* movimento: ease-out forte para entrada/saída e feedback; nunca ease-in */
-  --ease-smooth: cubic-bezier(0.23, 1, 0.32, 1);
-  --default-transition-duration: 150ms;
-  --default-transition-timing-function: cubic-bezier(0.23, 1, 0.32, 1);
-
-  --animate-skeleton: skeleton 2s -1s infinite linear;
-  @keyframes skeleton {
-    to {
-      background-position: -200% 0;
-    }
-  }
+  --ease-out: var(--cd-ease-out);
+  --ease-in-out: var(--cd-ease-in-out);
+  --transition-duration-instant: var(--cd-duration-instant);
+  --transition-duration-fast: var(--cd-duration-fast);
+  --transition-duration-base: var(--cd-duration-base);
+  --transition-duration-slow: var(--cd-duration-slow);
+  --default-transition-duration: var(--cd-duration-base);
+  --default-transition-timing-function: var(--cd-ease-out);
 }
 
 :root {
-  --background: var(--color-neutral-100);
-  --foreground: var(--color-neutral-800);
-  --card: color-mix(in srgb, var(--color-neutral-100) 40%, var(--color-white));
-  --card-foreground: var(--color-neutral-800);
-  --popover: color-mix(in srgb, var(--color-neutral-100) 40%, var(--color-white));
-  --popover-foreground: var(--color-neutral-800);
-  --primary: oklch(0.585 0.2 277);
-  --primary-foreground: var(--color-white);
-  --secondary: color-mix(in srgb, var(--color-black) 6%, transparent);
-  --secondary-foreground: var(--color-neutral-900);
-  --muted: color-mix(in srgb, var(--color-black) 4%, transparent);
-  --muted-foreground: color-mix(in srgb, var(--color-neutral-500) 90%, var(--color-black));
-  --accent: color-mix(in srgb, var(--color-black) 5%, transparent);
-  --accent-foreground: var(--color-neutral-900);
-  --destructive: var(--color-red-500);
-  --destructive-foreground: var(--color-red-700);
-  --success: var(--color-emerald-500);
-  --success-foreground: var(--color-emerald-700);
-  --warning: var(--color-amber-500);
-  --warning-foreground: var(--color-amber-700);
-  --info: var(--primary);
-  --info-foreground: var(--color-indigo-700);
-  --border: color-mix(in srgb, var(--color-black) 8%, transparent);
-  --input: color-mix(in srgb, var(--color-black) 10%, transparent);
-  --ring: oklch(0.65 0.18 277);
-  --radius: 0.625rem;
+  --background: #f6f4ee;
+  --foreground: #262626;
+  --card: #fbfaf6;
+  --card-foreground: #262626;
+  --popover: #fbfaf6;
+  --popover-foreground: #262626;
+  --muted: rgb(0 0 0 / 0.04);
+  --muted-foreground: #686868;
+  --accent: rgb(0 0 0 / 0.04);
+  --accent-foreground: #262626;
+  --border: rgb(0 0 0 / 0.08);
+  --input: rgb(0 0 0 / 0.12);
+  --ring: #e0b320;
+  --destructive: #dc2626;
+  --destructive-foreground: #b91c1c;
+  --brand: #ffd23f;
+  --brand-foreground: #7a5c00;
+  --brand-contrast: #1c1c1c;
+  --success: #16a34a;
+  --success-foreground: #15803d;
+
+  --radius: 0.75rem;
+  --radius-button: var(--radius);
+  --radius-field: var(--radius);
+
+  --cd-duration-instant: 80ms;
+  --cd-duration-fast: 120ms;
+  --cd-duration-base: 160ms;
+  --cd-duration-slow: 240ms;
+  --cd-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --cd-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --cd-scale-enter: 0.96;
 }
 
 .dark {
-  --background: color-mix(in srgb, var(--color-neutral-950) 95%, var(--color-white));
-  --foreground: var(--color-neutral-100);
-  --card: color-mix(in srgb, var(--background) 98%, var(--color-white));
-  --card-foreground: var(--color-neutral-100);
-  --popover: color-mix(in srgb, var(--background) 98%, var(--color-white));
-  --popover-foreground: var(--color-neutral-100);
-  --primary: oklch(0.63 0.2 277);
-  --primary-foreground: var(--color-white);
-  --secondary: color-mix(in srgb, var(--color-white) 8%, transparent);
-  --secondary-foreground: var(--color-neutral-100);
-  --muted: color-mix(in srgb, var(--color-white) 4%, transparent);
-  --muted-foreground: color-mix(in srgb, var(--color-neutral-500) 90%, var(--color-white));
-  --accent: color-mix(in srgb, var(--color-white) 8%, transparent);
-  --accent-foreground: var(--color-neutral-100);
-  --destructive: color-mix(in srgb, var(--color-red-500) 90%, var(--color-white));
-  --destructive-foreground: var(--color-red-400);
-  --success-foreground: var(--color-emerald-400);
-  --warning-foreground: var(--color-amber-400);
-  --info-foreground: var(--color-indigo-300);
-  --border: color-mix(in srgb, var(--color-white) 7%, transparent);
-  --input: color-mix(in srgb, var(--color-white) 9%, transparent);
-  --ring: oklch(0.7 0.17 277);
+  --background: #1c1c1c;
+  --foreground: #f5f5f5;
+  --card: #222220;
+  --card-foreground: #f5f5f5;
+  --popover: #222220;
+  --popover-foreground: #f5f5f5;
+  --muted: rgb(255 255 255 / 0.04);
+  --muted-foreground: #8a8a8a;
+  --accent: rgb(255 255 255 / 0.06);
+  --accent-foreground: #f5f5f5;
+  --border: rgb(255 255 255 / 0.08);
+  --input: rgb(255 255 255 / 0.12);
+  --ring: #ffd23f;
+  --destructive-foreground: #f87171;
+  --brand-foreground: #ffd23f;
+  --success-foreground: #4ade80;
+}
+
+/* Popup do cd/ui: entra de scale(--cd-scale-enter) + opacidade a partir do gatilho, sai mais rápido. */
+@utility cd-popup {
+  transform-origin: var(--transform-origin);
+  transition-property: opacity, transform;
+  transition-duration: var(--cd-duration-base);
+  transition-timing-function: var(--cd-ease-out);
+  &[data-starting-style],
+  &[data-ending-style] {
+    opacity: 0;
+    transform: scale(var(--cd-scale-enter));
+  }
+  &[data-ending-style] {
+    transition-duration: var(--cd-duration-fast);
+  }
+  &[data-instant] {
+    transition-duration: 0ms;
+  }
+}
+
+/* Tom alto (chegada: Entrar, Convite, estados vazios, cards de Espaço): contorno grosso e sombra dura amarela. */
+@utility tom-alto {
+  border: 2px solid var(--color-tinta);
+  box-shadow: 4px 4px 0 0 var(--brand);
+  &:is(.dark *) {
+    border-color: var(--color-papel);
+  }
+}
+
+@keyframes caret {
+  0%,
+  70%,
+  100% {
+    opacity: 1;
+  }
+  20%,
+  50% {
+    opacity: 0;
+  }
+}
+
+@utility animate-caret {
+  animation: caret 1s ease-out infinite;
+}
+
+/* Movimento reduzido: a escala some (--cd-scale-enter: 1) e sobra o fade curto de opacidade.
+   O theme.json do cd zera as durações; aqui elas ficam curtas para o fade continuar existindo. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --cd-duration-instant: 80ms;
+    --cd-duration-fast: 80ms;
+    --cd-duration-base: 120ms;
+    --cd-duration-slow: 120ms;
+    --cd-scale-enter: 1;
+  }
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+  }
 }
 
 @layer base {
@@ -118,14 +173,11 @@
     text-rendering: optimizeLegibility;
   }
   body {
-    @apply bg-background font-sans text-foreground antialiased selection:bg-primary/20;
+    @apply bg-background font-sans text-foreground antialiased selection:bg-brand/40;
   }
   /* Phaser: pixel art nítida */
   canvas {
     image-rendering: pixelated;
-  }
-  kbd {
-    font-family: var(--font-sans);
   }
 }
 
@@ -138,25 +190,5 @@
   [data-trocando-tema] *::before,
   [data-trocando-tema] *::after {
     transition: none !important;
-  }
-}
-
-/* prefers-reduced-motion: desloca e escala viram só fade curto */
-@media (prefers-reduced-motion: reduce) {
-  [data-starting-style],
-  [data-ending-style] {
-    transition-duration: 0.01ms !important;
-  }
-  *,
-  *::before,
-  *::after {
-    scroll-behavior: auto !important;
-  }
-  .animate-spin {
-    animation-duration: 1.5s;
-  }
-  [data-slot="button"]:active,
-  [data-slot="toggle"]:active {
-    scale: none;
   }
 }

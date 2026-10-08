@@ -4,20 +4,19 @@ import { hashTexto } from "./pixel";
 
 /**
  * Textos do mundo (etiquetas de nome, Balões, rótulos de Zona e de porta) desenhados em canvas com
- * Inter, em resolução alta e filtro linear: ficam nítidos com o zoom inteiro da câmera e sem serrilhado.
+ * Ubuntu, em resolução alta e filtro linear: ficam nítidos com o zoom inteiro da câmera e sem serrilhado.
  */
 
-export const FONTE = 'Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+export const FONTE = 'Ubuntu, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 const FONTE_EMOJI = '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
 
-/** Espera o Inter (até 1,5 s) para não desenhar texto com a fonte reserva. */
+/** Espera o Ubuntu (até 1,5 s) para não desenhar texto com a fonte reserva. */
 export function fontesProntas(): Promise<void> {
   if (typeof document === "undefined" || !document.fonts) return Promise.resolve();
   return Promise.race([
     Promise.all([
-      document.fonts.load("500 12px Inter"),
-      document.fonts.load("600 11px Inter"),
-      document.fonts.load("700 12px Inter"),
+      document.fonts.load("500 12px Ubuntu"),
+      document.fonts.load("700 11px Ubuntu"),
     ]),
     new Promise((r) => setTimeout(r, 1500)),
   ])
@@ -81,15 +80,15 @@ function truncar(texto: string, max: number, peso: number, px: number): string {
 
 const COR_STATUS: Record<StatusAvatar, string> = { online: "#2FB67C", ausente: "#F5A524", naoPerturbe: "#E5484D" };
 
-/** Pílula escura translúcida: bolinha de status, nome (Inter 600) e, se houver, o Indicador de atividade. */
+/** Pílula escura translúcida: bolinha de status, nome (Ubuntu 700) e, se houver, o Indicador de atividade. */
 export function etiquetaNome(
   scene: Phaser.Scene,
   { nome, status, icone, ehEu, res }: { nome: string; status: StatusAvatar; icone: string; ehEu: boolean; res: number },
 ): Textura {
   const PX = 11;
   const H = 18;
-  const texto = truncar(nome, 120, 600, PX);
-  const larguraTexto = medidor(600, PX).measureText(texto).width;
+  const texto = truncar(nome, 120, 700, PX);
+  const larguraTexto = medidor(700, PX).measureText(texto).width;
   const larguraIcone = icone ? 14 : 0;
   const W = Math.ceil(8 + 6 + 5 + larguraTexto + (icone ? 4 + larguraIcone : 0) + 8);
   const chave = `etq:${hashTexto(`${texto}|${status}|${icone}|${ehEu}`).toString(36)}:${res}`;
@@ -115,7 +114,7 @@ export function etiquetaNome(
     ctx.lineWidth = 0.75;
     ctx.stroke();
     // nome
-    fonte(ctx, 600, PX);
+    fonte(ctx, 700, PX);
     ctx.fillStyle = "#FFFFFF";
     ctx.fillText(texto, 19, H / 2 + 3.9);
     if (icone) {
@@ -172,7 +171,7 @@ function quebrar(texto: string, max: number, peso: number, px: number): string[]
   return linhas.slice(0, 8);
 }
 
-/** Bolha branca com cauda e sombra suave, texto Inter 500 `#292D4C`, largura máxima ~200px. */
+/** Bolha branca com cauda e sombra suave, texto Ubuntu 500 `#292D4C`, largura máxima ~200px. */
 export function balao(scene: Phaser.Scene, texto: string, res: number): TexturaBalao {
   const PX = 12;
   const LINHA = 16;
@@ -225,8 +224,8 @@ export function balao(scene: Phaser.Scene, texto: string, res: number): TexturaB
 export function pilulaClara(scene: Phaser.Scene, texto: string, res: number, opcoes: { forte?: boolean } = {}): Textura {
   const PX = 10;
   const H = 16;
-  const t = truncar(texto, 160, 600, PX);
-  const tw = medidor(600, PX).measureText(t).width;
+  const t = truncar(texto, 160, 700, PX);
+  const tw = medidor(700, PX).measureText(t).width;
   const W = Math.ceil(tw + 16);
   const chave = `pil:${hashTexto(`${t}|${opcoes.forte}`).toString(36)}:${res}`;
   return registrar(scene, chave, W + 4, H + 4, res, (ctx) => {
@@ -242,7 +241,7 @@ export function pilulaClara(scene: Phaser.Scene, texto: string, res: number, opc
     ctx.lineWidth = 1;
     caminhoRedondo(ctx, 0.5, 0.5, W - 1, H - 1, (H - 1) / 2);
     ctx.stroke();
-    fonte(ctx, 600, PX);
+    fonte(ctx, 700, PX);
     ctx.fillStyle = "#4B4F73";
     ctx.fillText(t, 8, H / 2 + 3.4);
   });

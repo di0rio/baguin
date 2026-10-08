@@ -7,7 +7,7 @@ const Ctx = createContext<Tema | null>(null);
 
 const lerEscuro = () => document.documentElement.classList.contains("dark");
 
-/** Claro por padrão; a escolha fica só neste navegador. O index.html aplica a classe antes da primeira pintura. */
+/** Escuro por padrão; a escolha fica só neste navegador. O index.html aplica a classe antes da primeira pintura. */
 export function TemaProvider({ children }: { children: ReactNode }) {
   const [escuro, setEscuro] = useState(lerEscuro);
 
@@ -27,7 +27,7 @@ export function TemaProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", escuro ? "#0d0d0d" : "#f5f5f5");
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", escuro ? "#1c1c1c" : "#f6f4ee");
   }, [escuro]);
 
   const valor = useMemo(() => ({ escuro, alternar }), [escuro, alternar]);

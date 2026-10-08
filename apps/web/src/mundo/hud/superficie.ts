@@ -1,2 +1,6 @@
-/** Superfície flutuante do HUD sobre o mundo: mesmo vidro do cabeçalho do site, com sombra para destacar do mapa. */
-export const VIDRO = "border bg-background/80 backdrop-blur-md shadow-lg shadow-black/10";
+/**
+ * Superfície da HUD sobre o mundo, que segue o tema (o mundo não segue).
+ * Claro: adesivo, papel com contorno de tinta. Escuro: sólida escura com borda clara.
+ * Sem vidro, blur nem sombra suave.
+ */
+export const HUD = "border-[1.5px] shadow-none border-tinta bg-papel text-foreground dark:border-papel/70 dark:bg-background";

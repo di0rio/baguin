@@ -36,7 +36,7 @@ export function CapaEspaco({ id, className }: { id: string; className?: string }
       {galera.map((pecas, i) => (
         <div key={i} className="absolute -translate-x-1/2" style={{ left: `${LUGARES[i].x}%`, bottom: `${LUGARES[i].base}%` }}>
           <div className="absolute inset-x-1 -bottom-1 h-2.5 rounded-[50%] bg-black/15 blur-[2px] dark:bg-black/30" />
-          <AvatarCanvas pecas={pecas} dir="baixo" escala={LUGARES[i].escala} className="relative transition-transform duration-200 ease-smooth group-hover:-translate-y-1" />
+          <AvatarCanvas pecas={pecas} dir="baixo" escala={LUGARES[i].escala} className="relative transition-transform duration-base ease-out group-hover:-translate-y-1" />
         </div>
       ))}
     </div>

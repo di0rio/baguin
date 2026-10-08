@@ -7,7 +7,7 @@ import { CapaEspaco } from "../components/capa-espaco";
 import { CONTENEDOR, Pagina, Topo } from "../components/cabecalho";
 import { Erro } from "../components/erro";
 import { Button } from "../components/ui/button";
-import { Dialog, DialogClose, DialogFooter, DialogHeader, DialogPanel, DialogPopup, DialogTitle, DialogDescription } from "../components/ui/dialog";
+import { Dialog, DialogClose, DialogDescription, DialogFooter, DialogHeader, DialogPopup, DialogTitle } from "../components/ui/dialog";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "../components/ui/empty";
 import { Field, FieldLabel } from "../components/ui/field";
 import { Form } from "../components/ui/form";
@@ -23,17 +23,17 @@ function CartaoEspaco({ espaco }: { espaco: EspacoDto }) {
       <Link
         to={`/e/${espaco.id}`}
         aria-label={`Entrar em ${espaco.nome}`}
-        className="group flex flex-col gap-3 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        className="group tom-alto flex flex-col gap-3 rounded-2xl bg-card p-2.5 outline-none transition-transform duration-instant ease-out hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-safe:active:translate-y-0.5"
       >
         <div className="relative">
           <CapaEspaco id={espaco.id} />
-          <span className="absolute right-3 bottom-3 grid size-8 place-items-center rounded-full bg-background/85 text-foreground opacity-0 shadow-sm backdrop-blur transition-[opacity,translate] duration-200 ease-smooth group-focus-visible:translate-y-0 group-focus-visible:opacity-100 group-hover:translate-y-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100 translate-y-1">
+          <span className="absolute right-3 bottom-3 grid size-8 translate-y-1 place-items-center rounded-full border bg-card text-foreground opacity-0 transition-[opacity,translate] duration-base ease-out group-focus-visible:translate-y-0 group-focus-visible:opacity-100 group-hover:translate-y-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100">
             <ArrowRight className="size-4" />
           </span>
         </div>
-        <div className="flex flex-col gap-0.5 px-0.5">
-          <h2 className="truncate font-semibold tracking-tight">{espaco.nome}</h2>
-          <p className="text-sm text-muted-foreground">Criado em {data(espaco.criadoEm)}</p>
+        <div className="flex flex-col gap-0.5 px-1 pb-1">
+          <h2 className="truncate font-bold tracking-tight">{espaco.nome}</h2>
+          <p className="text-muted-foreground text-sm">Criado em {data(espaco.criadoEm)}</p>
         </div>
       </Link>
     </li>
@@ -44,7 +44,7 @@ function Esqueleto() {
   return (
     <ul className="grid gap-x-6 gap-y-8 sm:grid-cols-2 lg:grid-cols-3" role="status" aria-label="Carregando Espaços">
       {[0, 1, 2].map((i) => (
-        <li key={i} className="flex flex-col gap-3">
+        <li key={i} className="flex flex-col gap-3 p-2.5">
           <Skeleton className="aspect-[16/9] rounded-xl" />
           <Skeleton className="h-4 w-1/2" />
           <Skeleton className="h-3.5 w-1/3" />
@@ -88,9 +88,9 @@ export function Inicio() {
 
   return (
     <Pagina>
-      <Topo titulo="Seus Espaços" descricao="Entre num Espaço pra encontrar a galera ou crie um novo.">
+      <Topo titulo="seus espaços" descricao="Entre num Espaço pra encontrar a galera ou crie um novo.">
         <div>
-          <Button size="lg" onClick={abrirCriar}>
+          <Button variant="brand" size="lg" onClick={abrirCriar}>
             <Plus />
             Criar Espaço
           </Button>
@@ -103,16 +103,16 @@ export function Inicio() {
         {!espacos && !erro && <Esqueleto />}
 
         {espacos && espacos.length === 0 && (
-          <Empty className="rounded-2xl border border-dashed border-input">
+          <Empty className="tom-alto rounded-2xl bg-card">
             <EmptyHeader>
               <EmptyMedia variant="icon">
                 <DoorOpen />
               </EmptyMedia>
-              <EmptyTitle>Você ainda não está em nenhum Espaço</EmptyTitle>
+              <EmptyTitle>você ainda não está em nenhum espaço</EmptyTitle>
               <EmptyDescription>Crie o primeiro agora ou peça um Convite pra alguém que já tem um Espaço.</EmptyDescription>
             </EmptyHeader>
             <EmptyContent>
-              <Button onClick={abrirCriar}>
+              <Button variant="brand" onClick={abrirCriar}>
                 <Plus />
                 Criar Espaço
               </Button>
@@ -130,28 +130,22 @@ export function Inicio() {
       </div>
 
       <Dialog open={criarAberto} onOpenChange={setCriarAberto}>
-        <DialogPopup className="sm:max-w-md">
-          <Form
-            className="contents"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void criar();
-            }}
-          >
+        <DialogPopup className="sm:max-w-md" closeLabel="Fechar">
+          <Form className="contents" onSubmit={() => void criar()}>
             <DialogHeader>
-              <DialogTitle>Criar um Espaço</DialogTitle>
+              <DialogTitle>criar um espaço</DialogTitle>
               <DialogDescription>Dê um nome pro lugar onde a galera vai se encontrar. Depois é só mandar um Convite.</DialogDescription>
             </DialogHeader>
-            <DialogPanel>
+            <div>
               <Field>
                 <FieldLabel>Nome do Espaço</FieldLabel>
-                <Input autoFocus size="lg" name="nome" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Ex.: QG da galera" maxLength={60} autoComplete="off" />
+                <Input autoFocus name="nome" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Ex.: QG da galera" maxLength={60} autoComplete="off" />
               </Field>
               {erroCriar && <Erro className="mt-4">{erroCriar}</Erro>}
-            </DialogPanel>
+            </div>
             <DialogFooter>
               <DialogClose render={<Button variant="outline" />}>Cancelar</DialogClose>
-              <Button type="submit" loading={criando} disabled={!nome.trim()}>
+              <Button type="submit" variant="brand" loading={criando} disabled={!nome.trim()}>
                 Criar Espaço
               </Button>
             </DialogFooter>

@@ -6,18 +6,20 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <!-- Geist na interface; Inter só nos textos desenhados no Phaser (rotulos.ts) -->
+    <!-- Ubuntu na interface e nos textos do Phaser (rotulos.ts); Ubuntu Mono nas teclas -->
     <link
-      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Inter:wght@500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@400;500;700&family=Ubuntu+Mono:wght@400;700&display=swap"
       rel="stylesheet"
     />
-    <meta name="theme-color" content="#f5f5f5" />
+    <meta name="theme-color" content="#1c1c1c" />
     <title>Baguin</title>
     <script>
-      // aplica o tema salvo antes da primeira pintura (padrão: claro)
+      // aplica o tema salvo antes da primeira pintura (padrão: escuro)
       try {
-        if (localStorage.getItem("baguin-tema") === "dark") document.documentElement.classList.add("dark");
-      } catch {}
+        if (localStorage.getItem("baguin-tema") !== "light") document.documentElement.classList.add("dark");
+      } catch {
+        document.documentElement.classList.add("dark");
+      }
     </script>
   </head>
   <body>

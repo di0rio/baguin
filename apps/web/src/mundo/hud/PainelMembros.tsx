@@ -7,11 +7,12 @@ import { Erro } from "../../components/erro";
 import { AlertDialog, AlertDialogClose, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogPopup, AlertDialogTitle } from "../../components/ui/alert-dialog";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
-import { Menu, MenuGroup, MenuGroupLabel, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "../../components/ui/menu";
+import { DropdownMenu, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuPopup, DropdownMenuSeparator, DropdownMenuTrigger } from "../../components/ui/dropdown-menu";
 import { SheetDescription, SheetHeader, SheetPanel, SheetTitle } from "../../components/ui/sheet";
 import { cn } from "../../lib/utils";
 import type { Presente } from "../sala";
 import { horaCurta } from "./hooks";
+import { HUD } from "./superficie";
 
 type Acao = { tipo: "remover" | "banir"; membro: MembroDto };
 
@@ -73,20 +74,20 @@ export function PainelMembros({ espacoId, contaId, meuPapel, presentes, membros,
   return (
     <>
       <SheetHeader className="p-5 pb-3">
-        <SheetTitle>Membros</SheetTitle>
+        <SheetTitle>membros</SheetTitle>
         <SheetDescription>Quem está aqui agora e quem faz parte do Espaço.</SheetDescription>
       </SheetHeader>
       <SheetPanel className="flex flex-col gap-6 p-5 pt-2">
         {erro && <Erro>{erro}</Erro>}
 
         <section aria-label="Neste Lugar" className="flex flex-col gap-1">
-          <h3 className="pb-1 text-sm font-semibold">Neste Lugar · {presentes.length}</h3>
+          <h3 className="pb-1 font-bold text-sm">neste lugar · {presentes.length}</h3>
           <ul className="flex flex-col">
             {presentes.map((p) => (
               <li key={p.contaId} className="flex items-center gap-3 py-1.5">
                 <span className="relative">
                   <AvatarBolha pecas={p.pecas} nome={p.nome} tamanho={36} />
-                  <span className={cn("absolute -right-0.5 -bottom-0.5 size-3 rounded-full border-2 border-popover", p.naoPerturbe ? "bg-destructive" : "bg-success")} />
+                  <span className={cn("absolute -right-0.5 -bottom-0.5 size-3 rounded-full border-2 border-papel dark:border-background", p.naoPerturbe ? "bg-destructive" : "bg-success")} />
                 </span>
                 <span className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate text-sm font-medium">
@@ -114,7 +115,7 @@ export function PainelMembros({ espacoId, contaId, meuPapel, presentes, membros,
         </section>
 
         <section aria-label="Todos os Membros" className="flex flex-col gap-1">
-          <h3 className="pb-1 text-sm font-semibold">Todos · {membros.length}</h3>
+          <h3 className="pb-1 font-bold text-sm">todos · {membros.length}</h3>
           <ul className="flex flex-col">
             {membros.map((m) => {
               const bloqueado = bloqueados.has(m.contaId);
@@ -128,7 +129,7 @@ export function PainelMembros({ espacoId, contaId, meuPapel, presentes, membros,
                 <li key={m.contaId} className="flex items-center gap-3 py-1.5">
                   <span className="relative">
                     <AvatarBolha pecas={presente?.pecas} nome={m.nome} tamanho={36} />
-                    {presente && <span className="absolute -right-0.5 -bottom-0.5 size-3 rounded-full border-2 border-popover bg-success" title="Neste Lugar" />}
+                    {presente && <span className="absolute -right-0.5 -bottom-0.5 size-3 rounded-full border-2 border-papel bg-success dark:border-background" title="Neste Lugar" />}
                   </span>
                   <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                     <span className="truncate text-sm font-medium">
@@ -152,46 +153,46 @@ export function PainelMembros({ espacoId, contaId, meuPapel, presentes, membros,
                     )}
                   </span>
                   {temMenu && (
-                    <Menu>
-                      <MenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label={`Ações para ${m.nome}`} disabled={ocupado} />}>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label={`Ações para ${m.nome}`} disabled={ocupado} />}>
                         <MoreHorizontal />
-                      </MenuTrigger>
-                      <MenuPopup align="end" className="min-w-52">
-                        <MenuItem onClick={() => void executar(() => (bloqueado ? api.desbloquear(m.contaId) : api.bloquear(m.contaId)))}>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuPopup align="end" className={cn(HUD, "min-w-52 rounded-2xl p-1.5")}>
+                        <DropdownMenuItem onClick={() => void executar(() => (bloqueado ? api.desbloquear(m.contaId) : api.bloquear(m.contaId)))}>
                           {bloqueado ? <UserCheck className="size-4 opacity-70" /> : <UserX className="size-4 opacity-70" />}
                           {bloqueado ? "Desbloquear" : "Bloquear"}
-                        </MenuItem>
+                        </DropdownMenuItem>
                         {donoAtribui && (
-                          <MenuItem onClick={() => void executar(() => api.definirPapel(espacoId, m.contaId, m.papel === "moderador" ? null : "moderador"))}>
+                          <DropdownMenuItem onClick={() => void executar(() => api.definirPapel(espacoId, m.contaId, m.papel === "moderador" ? null : "moderador"))}>
                             {m.papel === "moderador" ? <ShieldOff className="size-4 opacity-70" /> : <Shield className="size-4 opacity-70" />}
                             {m.papel === "moderador" ? "Remover Moderador" : "Tornar Moderador"}
-                          </MenuItem>
+                          </DropdownMenuItem>
                         )}
                         {agir && (
                           <>
-                            <MenuSeparator />
-                            <MenuGroup>
-                              <MenuGroupLabel>Silenciar por</MenuGroupLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuGroup>
+                              <DropdownMenuLabel>Silenciar por</DropdownMenuLabel>
                               {MINUTOS.map((min) => (
-                                <MenuItem key={min} onClick={() => void executar(() => api.silenciar(espacoId, m.contaId, min))}>
+                                <DropdownMenuItem key={min} onClick={() => void executar(() => api.silenciar(espacoId, m.contaId, min))}>
                                   <VolumeX className="size-4 opacity-70" />
                                   {rotuloMin(min)}
-                                </MenuItem>
+                                </DropdownMenuItem>
                               ))}
-                            </MenuGroup>
-                            <MenuSeparator />
-                            <MenuItem variant="destructive" onClick={() => setConfirmar({ tipo: "remover", membro: m })}>
+                            </DropdownMenuGroup>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem variant="destructive" onClick={() => setConfirmar({ tipo: "remover", membro: m })}>
                               <UserMinus className="size-4" />
                               Remover do Espaço
-                            </MenuItem>
-                            <MenuItem variant="destructive" onClick={() => setConfirmar({ tipo: "banir", membro: m })}>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem variant="destructive" onClick={() => setConfirmar({ tipo: "banir", membro: m })}>
                               <Ban className="size-4" />
                               Banir
-                            </MenuItem>
+                            </DropdownMenuItem>
                           </>
                         )}
-                      </MenuPopup>
-                    </Menu>
+                      </DropdownMenuPopup>
+                    </DropdownMenu>
                   )}
                 </li>
               );
@@ -205,7 +206,7 @@ export function PainelMembros({ espacoId, contaId, meuPapel, presentes, membros,
           {mostrar && (
             <>
               <AlertDialogHeader>
-                <AlertDialogTitle>{mostrar.tipo === "remover" ? `Remover ${mostrar.membro.nome}?` : `Banir ${mostrar.membro.nome}?`}</AlertDialogTitle>
+                <AlertDialogTitle>{mostrar.tipo === "remover" ? `remover ${mostrar.membro.nome}?` : `banir ${mostrar.membro.nome}?`}</AlertDialogTitle>
                 <AlertDialogDescription>
                   {mostrar.tipo === "remover"
                     ? `${mostrar.membro.nome} sai do Espaço, mas poderá voltar com um novo Convite.`

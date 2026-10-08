@@ -9,7 +9,7 @@ import { Field, FieldLabel } from "../../components/ui/field";
 import { Form } from "../../components/ui/form";
 import { Input } from "../../components/ui/input";
 import { SheetDescription, SheetHeader, SheetPanel, SheetTitle } from "../../components/ui/sheet";
-import { toastManager } from "../../components/ui/toast";
+import { toastManager } from "../../lib/toast";
 import { cn } from "../../lib/utils";
 
 const link = (codigo: string) => `${window.location.origin}/convite/${codigo}`;
@@ -64,19 +64,13 @@ export function PainelConvites({ espacoId }: { espacoId: string }) {
   return (
     <>
       <SheetHeader className="p-5 pb-3">
-        <SheetTitle>Convites</SheetTitle>
+        <SheetTitle>convites</SheetTitle>
         <SheetDescription>Gere um link e mande pra quem você quer chamar.</SheetDescription>
       </SheetHeader>
       <SheetPanel className="flex flex-col gap-6 p-5 pt-2">
         {erro && <Erro>{erro}</Erro>}
 
-        <Form
-          className="flex flex-col gap-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void criar();
-          }}
-        >
+        <Form className="gap-3" onSubmit={() => void criar()}>
           <div className="grid grid-cols-2 gap-3">
             <Field>
               <FieldLabel>Validade (horas)</FieldLabel>
@@ -87,21 +81,21 @@ export function PainelConvites({ espacoId }: { espacoId: string }) {
               <Input type="number" name="usos" min={1} max={100} value={usosMax} onChange={(e) => setUsosMax(Number(e.target.value))} />
             </Field>
           </div>
-          <Button type="submit" loading={gerando}>
+          <Button type="submit" variant="brand" loading={gerando}>
             <Plus />
             Gerar Convite
           </Button>
         </Form>
 
         <section aria-label="Convites ativos" className="flex flex-col gap-3">
-          <h3 className="text-sm font-semibold">Ativos{convites ? ` · ${convites.length}` : ""}</h3>
+          <h3 className="font-bold text-sm">ativos{convites ? ` · ${convites.length}` : ""}</h3>
           {convites && convites.length === 0 && (
             <Empty className="rounded-xl border border-dashed py-8 md:py-8">
               <EmptyHeader>
                 <EmptyMedia variant="icon">
                   <Link2 />
                 </EmptyMedia>
-                <EmptyTitle className="text-base">Nenhum Convite ativo</EmptyTitle>
+                <EmptyTitle className="text-base">nenhum convite ativo</EmptyTitle>
                 <EmptyDescription>Gere um e mande o link pra quem você quer chamar.</EmptyDescription>
               </EmptyHeader>
             </Empty>

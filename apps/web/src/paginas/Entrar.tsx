@@ -7,7 +7,7 @@ import { authClient, caminhoSeguro } from "../auth";
 import { BotaoTema } from "../components/cabecalho";
 import { Carregando } from "../components/carregando";
 import { Erro } from "../components/erro";
-import { Logo, Marca } from "../components/marca";
+import { Assinatura, Logo, Marca } from "../components/marca";
 import { Discord, Google } from "../components/provedores";
 import { Button } from "../components/ui/button";
 import { Field, FieldError, FieldLabel } from "../components/ui/field";
@@ -61,24 +61,16 @@ export function Entrar() {
 
   return (
     <div className="grid min-h-svh lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
-      <aside className="relative isolate hidden flex-col justify-between overflow-hidden border-r p-10 lg:flex">
-        <div
-          aria-hidden
-          className="absolute inset-0 -z-10"
-          style={{
-            background:
-              "radial-gradient(70% 60% at 85% 0%, color-mix(in oklch, var(--primary) 26%, transparent), transparent 70%), radial-gradient(60% 50% at 0% 100%, color-mix(in oklch, var(--primary) 14%, transparent), transparent 70%)",
-          }}
-        />
+      <aside className="relative hidden flex-col justify-between overflow-hidden border-r p-10 lg:flex">
         <Marca />
         <div className="flex max-w-lg flex-col gap-4">
-          <h1 className="text-balance font-heading text-5xl font-semibold tracking-[-0.03em]">Um cantinho na internet pra ficar junto.</h1>
-          <p className="text-pretty text-lg leading-relaxed text-muted-foreground">
+          <h1 className="text-balance font-bold font-heading text-5xl tracking-[-0.03em]">um cantinho na internet pra ficar junto.</h1>
+          <p className="text-pretty text-lg text-muted-foreground leading-relaxed">
             Crie um Espaço, monte seu Avatar e converse com a galera de pertinho, como se estivessem na mesma sala.
           </p>
         </div>
         <div aria-hidden className="relative -mx-2 flex items-end justify-center gap-3 pt-6">
-          <div className="absolute inset-x-6 bottom-1 h-5 rounded-[50%] bg-foreground/8 blur-md" />
+          <div className="absolute inset-x-6 bottom-1 h-3 rounded-[50%] bg-foreground/10" />
           {PECAS_VITRINE.map((p, i) => (
             <AvatarCanvas key={i} pecas={p} dir="baixo" escala={6} className={i % 2 ? "translate-y-0" : "-translate-y-2"} />
           ))}
@@ -89,11 +81,11 @@ export function Entrar() {
         <div className="flex h-16 items-center justify-end px-4 sm:px-6 lg:px-8">
           <BotaoTema />
         </div>
-        <main className="flex flex-1 items-start justify-center px-4 pb-12 sm:items-center sm:px-6">
-          <div className="flex w-full max-w-sm flex-col gap-7">
+        <main className="flex flex-1 items-start justify-center px-4 pb-8 sm:items-center sm:px-6">
+          <div className="tom-alto flex w-full max-w-sm flex-col gap-7 rounded-2xl bg-card p-6 sm:p-8">
             <div className="flex flex-col gap-3 max-lg:items-center max-lg:text-center">
               <Logo className="size-10 lg:hidden" />
-              <h2 className="font-heading text-2xl font-semibold tracking-[-0.03em]">{cadastrando ? "Bem-vindo ao Baguin" : "Que bom te ver de novo"}</h2>
+              <h2 className="font-bold font-heading text-2xl tracking-[-0.03em]">{cadastrando ? "bem-vindo ao Baguin" : "que bom te ver de novo"}</h2>
               <p className="text-pretty text-muted-foreground">{cadastrando ? "Crie sua conta pra montar seu Avatar e entrar num Espaço." : "Entre pra voltar pros seus Espaços."}</p>
             </div>
 
@@ -111,9 +103,9 @@ export function Entrar() {
                 {provedores.map((p) => (
                   <Button
                     key={p}
-                    size="xl"
-                    variant={p === "discord" ? "default" : "outline"}
-                    className={p === "discord" ? "w-full border-[#5865F2] bg-[#5865F2] text-white hover:bg-[#5865F2]/90" : "w-full"}
+                    size="lg"
+                    variant="outline"
+                    className="w-full"
                     onClick={() => void authClient.signIn.social({ provider: p, callbackURL: voltar })}
                   >
                     {p === "discord" ? <Discord size={20} /> : <Google size={20} />}
@@ -140,30 +132,30 @@ export function Entrar() {
                   }}
                 >
                   <TabsList className="w-full">
-                    <TabsTab value="cadastrar">Cadastrar</TabsTab>
-                    <TabsTab value="entrar">Entrar</TabsTab>
+                    <TabsTab className="flex-1" value="cadastrar">
+                      Cadastrar
+                    </TabsTab>
+                    <TabsTab className="flex-1" value="entrar">
+                      Entrar
+                    </TabsTab>
                   </TabsList>
                   <TabsPanel value={modo} className="pt-3">
-                    <Form className="flex flex-col gap-4" onSubmit={(e) => {
-                      e.preventDefault();
-                      void enviar();
-                    }}>
+                    <Form className="gap-4" onSubmit={() => void enviar()}>
                       {cadastrando && (
                         <Field>
                           <FieldLabel>Nome</FieldLabel>
-                          <Input size="lg" name="nome" value={nome} onChange={(e) => setNome(e.target.value)} required maxLength={NOME_MAX} autoComplete="nickname" placeholder="Como a galera te chama" />
+                          <Input name="nome" value={nome} onChange={(e) => setNome(e.target.value)} required maxLength={NOME_MAX} autoComplete="nickname" placeholder="Como a galera te chama" />
                           <FieldError match="valueMissing">Diga como a galera te chama.</FieldError>
                         </Field>
                       )}
                       <Field>
                         <FieldLabel>E-mail</FieldLabel>
-                        <Input size="lg" name="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" placeholder="voce@exemplo.com" />
+                        <Input name="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" placeholder="voce@exemplo.com" />
                         <FieldError>Confere o e-mail, parece que algo faltou.</FieldError>
                       </Field>
                       <Field>
                         <FieldLabel>Senha</FieldLabel>
                         <Input
-                          size="lg"
                           name="senha"
                           type="password"
                           value={senha}
@@ -176,7 +168,7 @@ export function Entrar() {
                         <FieldError>A senha precisa ter pelo menos 8 caracteres.</FieldError>
                       </Field>
                       {erro && <Erro>{erro}</Erro>}
-                      <Button type="submit" size="xl" loading={enviando} className="w-full">
+                      <Button type="submit" variant="brand" size="lg" loading={enviando} className="w-full">
                         {cadastrando ? "Criar conta" : "Entrar"}
                       </Button>
                     </Form>
@@ -188,6 +180,9 @@ export function Entrar() {
             {config && !config.devLogin && provedores.length === 0 && <Erro>Nenhuma forma de login está configurada neste servidor.</Erro>}
           </div>
         </main>
+        <footer className="flex h-14 items-center px-4 sm:px-6 lg:px-8">
+          <Assinatura />
+        </footer>
       </div>
     </div>
   );

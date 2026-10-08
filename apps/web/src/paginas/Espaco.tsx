@@ -29,7 +29,7 @@ export function Espaco() {
 
   if (erro) {
     return (
-      <EstadoPagina icone={<DoorClosed />} tom="perigo" titulo="Não deu pra abrir o Espaço" acoes={<Button render={<Link to="/" />}>Voltar pro início</Button>}>
+      <EstadoPagina icone={<DoorClosed />} tom="perigo" titulo="não deu pra abrir o espaço" acoes={<Button variant="brand" nativeButton={false} render={<Link to="/" />}>Voltar pro início</Button>}>
         {erro}
       </EstadoPagina>
     );

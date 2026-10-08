@@ -9,7 +9,7 @@ Decisões técnicas. Termos seguem o [CONTEXT.md](../CONTEXT.md); restrições n
 | Mundo 2D | Phaser + mapas do Tiled | Sprites LPC para Avatar e Peças |
 | App web | Vite + React (SPA) no Cloudflare Pages | Free sem trava comercial; sem SSR |
 | API | Node, no mesmo servidor do Colyseus | Cadastro, Convite, Mural, Inventário |
-| Interface | React + Tailwind v4 + coss ui (Base UI) | Componentes copiados em `apps/web/src/components/ui`; ver [design.md](design.md) |
+| Interface | React + Tailwind v4 + cd/ui (Base UI) | Componentes copiados em `apps/web/src/components/ui`; ver [design.md](design.md) |
 | Tempo real | Colyseus | Cada Lugar é uma room; servidor é autoridade (movimento, Zona, Rádio). Roda na VM da Oracle |
 | Login | Better Auth (Discord + Google) | Sem senha nem e-mail na v1; sessões no Neon |
 | Banco | Neon (Postgres, free) | 0,5GB, 100 CU-h/mês, dorme após 5 min |
