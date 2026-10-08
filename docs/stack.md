@@ -6,7 +6,7 @@ Decisões técnicas. Termos seguem o [CONTEXT.md](../CONTEXT.md); restrições n
 |---|---|---|
 | Base | Do zero, TypeScript | ADR 0004 |
 | Voz, Câmera, Transmissão | LiveKit (SFU) | Dev: LiveKit Cloud free. Uso real: self-host na Oracle Always Free |
-| Mundo 2D | Phaser + mapas do Tiled | Sprites LPC para Avatar e Peças |
+| Mundo 2D | Phaser + mapas do Tiled | Avatar vetorial desenhado por código (ver design.md) |
 | App web | Vite + React (SPA) no Cloudflare Pages | Free sem trava comercial; sem SSR |
 | API | Node, no mesmo servidor do Colyseus | Cadastro, Convite, Mural, Inventário |
 | Interface | React + Tailwind v4 + cd/ui (Base UI) | Componentes copiados em `apps/web/src/components/ui`; ver [design.md](design.md) |

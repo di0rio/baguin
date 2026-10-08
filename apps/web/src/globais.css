@@ -175,16 +175,9 @@
   body {
     @apply bg-background font-sans text-foreground antialiased selection:bg-brand/40;
   }
-  /* Phaser: pixel art nítida */
-  canvas {
-    image-rendering: pixelated;
-  }
 }
 
 @layer utilities {
-  .pixelado {
-    image-rendering: pixelated;
-  }
   /* troca de tema sem transições espalhadas pela tela */
   [data-trocando-tema] *,
   [data-trocando-tema] *::before,

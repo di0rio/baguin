@@ -53,6 +53,7 @@ export const verification = pgTable("verification", {
 // --- Baguin ---
 export const avatar = pgTable("avatar", {
   contaId: text().primaryKey().references(() => user.id, { onDelete: "cascade" }),
+  /** Pode estar no formato antigo (índices de cor): leia sempre por `migrarPecas`. */
   pecas: jsonb().$type<Pecas>().notNull(),
   atualizadoEm: ts().notNull().defaultNow(),
 });

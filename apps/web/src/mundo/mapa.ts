@@ -1,37 +1,40 @@
 import { TEMPLATES_LUGAR, TILE, TIPOS_PAREDE, baseSolida, movelSolido, type Movel, type Template } from "@baguin/shared";
 import { desenharMovel } from "./moveis";
-import { Pena, aleatorio, clarear, criarCanvas, escurecer, hashTexto, mix } from "./pixel";
+import { MUNDO } from "./paleta";
+import { Caneta, FINO, TRACO, aleatorio, criarCanvas, hashTexto, type Ponto } from "./traco";
 
 /**
- * Desenho do Lugar em pixel art (visão 3/4, paleta pastel): chão texturizado, paredes com face frontal,
- * tapetes, decoração de parede e portas vão num canvas só (camada do chão); cada Móvel vira um sprite
- * ordenado por y (ver `objetosDoMapa`), para o Avatar passar atrás/na frente deles.
+ * Desenho do Lugar em cartoon de tinta e papel (visão 3/4): chão, paredes com face frontal, tapetes, decoração
+ * de parede e portas vão num canvas só (camada do chão); cada Móvel vira um sprite ordenado por y (ver
+ * `objetosDoMapa`), para o Avatar passar atrás/na frente deles. Contorno grosso de tinta, parede mais clara,
+ * chão creme, sombra chapada mais escura. Marca de material só em traço fino e rara.
  */
 
 type Tema = {
-  parede: { cap: string; capLuz: string; face: string; faceSombra: string; rodape: string; rodapeLuz: string };
   clima: "interno" | "externo";
+  piso: "tabua" | "ladrilho" | "grama";
 };
 
 const TEMAS: Record<Template, Tema> = {
-  sala: {
-    parede: { cap: "#6A5B8A", capLuz: "#8E80B0", face: "#F7EAD5", faceSombra: "#EBD9BC", rodape: "#C49A70", rodapeLuz: "#DDB890" },
-    clima: "interno",
-  },
-  escritorio: {
-    parede: { cap: "#525B82", capLuz: "#7983B2", face: "#E9ECF8", faceSombra: "#D9DEEF", rodape: "#A9B2D4", rodapeLuz: "#C5CCE6" },
-    clima: "interno",
-  },
-  terraco: {
-    parede: { cap: "#3F8A52", capLuz: "#7FCB7A", face: "#63B366", faceSombra: "#4E9E5A", rodape: "#2C6A43", rodapeLuz: "#8BD683" },
-    clima: "externo",
-  },
+  sala: { clima: "interno", piso: "tabua" },
+  escritorio: { clima: "interno", piso: "ladrilho" },
+  terraco: { clima: "externo", piso: "grama" },
 };
 
 export type Lado = "cima" | "baixo" | "esquerda" | "direita";
 export type PortaMapa = { col: number; lin: number; texto: string; lado: Lado };
 export type ZonaMapa = { letra: string; nome: string; tipo: "comum" | "reuniao"; col0: number; lin0: number; col1: number; lin1: number };
-export type ObjetoMapa = { chave: string; canvas: HTMLCanvasElement; x: number; y: number; depth: number };
+export type ObjetoMapa = {
+  chave: string;
+  canvas: HTMLCanvasElement;
+  /** Pixels do canvas por unidade do mundo. */
+  res: number;
+  x: number;
+  y: number;
+  depth: number;
+  /** Móvel que originou o sprite (a Deixa, etapa 4, usa para achar o alcançável). */
+  movel?: Movel;
+};
 
 const isPorta = (c: string | undefined) => c !== undefined && c >= "1" && c <= "9";
 const isZona = (c: string | undefined) => c !== undefined && c >= "a" && c <= "z";
@@ -39,153 +42,122 @@ const isZona = (c: string | undefined) => c !== undefined && c >= "a" && c <= "z
 /** Profundidade do chão e da decoração rasteira (sempre atrás de qualquer Avatar). */
 export const PROF_CHAO = -10;
 
+/** Pixels do canvas por unidade do mundo, conforme o zoom da câmera e a densidade da tela (cobre um zoom não inteiro). */
+export const resolucaoMundo = (zoom: number, densidade = 1) => Math.min(4, Math.max(1, Math.ceil(zoom * densidade)));
+
 // ---------------------------------------------------------------- pisos
 
-function pisoMadeira(p: Pena, W: number, H: number, rnd: () => number) {
-  const tons = ["#EED6AE", "#E8CFA4", "#F1DBB6", "#E5CB9F", "#ECD3A9"];
-  for (let r = 0; r < H / 8; r++) {
-    const y = r * 8;
-    let x = -Math.floor(rnd() * 96);
-    while (x < W) {
-      const len = 72 + Math.floor(rnd() * 4) * 12;
-      const tom = tons[Math.floor(rnd() * tons.length)];
-      const x0 = Math.max(0, x);
-      const w = Math.min(W, x + len) - x0;
-      p.r(x0, y, w, 8, tom);
-      p.h(x0, y, w, clarear(tom, 0.35)); // quina de cima iluminada
-      p.h(x0, y + 7, w, mix(tom, "#9C7A52", 0.35)); // junta
-      if (x >= 0) p.v(x, y, 8, mix(tom, "#9C7A52", 0.35));
-      const veios = 2 + Math.floor(rnd() * 3);
-      for (let i = 0; i < veios; i++) {
-        const gx = x0 + 3 + Math.floor(rnd() * Math.max(1, w - 14));
-        p.h(gx, y + 2 + Math.floor(rnd() * 4), 4 + Math.floor(rnd() * 9), mix(tom, "#B8915F", 0.3));
-      }
-      if (rnd() < 0.3) p.p(x0 + 4 + Math.floor(rnd() * Math.max(1, w - 8)), y + 3, mix(tom, "#8C6A43", 0.45));
-      x += len;
+/** Três riscos de tábua: três emendas paralelas de comprimentos diferentes. É a marca de material do piso e do deck. */
+function tabuas(p: Caneta, x: number, y: number, len: number) {
+  [1, 0.7, 0.88].forEach((k, i) => p.linha([[x, y + i * 7], [x + len * k, y + i * 7]]));
+}
+
+/** Alguns grupos de tábuas soltos pelo piso. */
+function pisoTabua(p: Caneta, W: number, H: number, rnd: () => number) {
+  for (let ty = 1; ty < H / TILE - 1; ty++) {
+    for (let tx = 1; tx < W / TILE - 1; tx++) {
+      if (rnd() > 0.04) continue;
+      tabuas(p, tx * TILE + 2 + Math.floor(rnd() * 6), ty * TILE + 4 + Math.floor(rnd() * 6), 22 + Math.floor(rnd() * 8));
     }
   }
 }
 
-function pisoAzulejo(p: Pena, W: number, H: number, rnd: () => number) {
-  for (let ty = 0; ty < H / TILE; ty++) {
-    for (let tx = 0; tx < W / TILE; tx++) {
+/** Cruzinhas nas quinas, a cada quatro tiles: dá a ideia do ladrilho sem desenhar o piso inteiro. */
+function pisoLadrilho(p: Caneta, W: number, H: number) {
+  for (let ty = 4; ty < H / TILE - 1; ty += 4) {
+    for (let tx = 4; tx < W / TILE - 1; tx += 4) {
       const x = tx * TILE;
       const y = ty * TILE;
-      const base = (tx + ty) % 2 ? "#E3E6EF" : "#DCE0EB";
-      p.r(x, y, TILE, TILE, base);
-      p.h(x, y, TILE, "#F3F5FB");
-      p.v(x, y, TILE, "#F3F5FB");
-      p.h(x, y + TILE - 1, TILE, "#C5CADB");
-      p.v(x + TILE - 1, y, TILE, "#C5CADB");
-      // reflexo diagonal sutil
-      for (let i = 0; i < 6; i++) p.p(x + 5 + i, y + 11 - i, clarear(base, 0.5));
-      for (let i = 0; i < 3; i++) p.p(x + 4 + Math.floor(rnd() * 24), y + 4 + Math.floor(rnd() * 24), mix(base, "#B6BCD2", 0.35));
+      p.linha([[x - 3, y], [x + 3, y]]);
+      p.linha([[x, y - 3], [x, y + 3]]);
     }
   }
 }
 
-function pisoGrama(p: Pena, W: number, H: number, rnd: () => number) {
-  p.r(0, 0, W, H, "#A5D67C");
-  // manchas suaves de tom
-  for (let i = 0; i < 60; i++) {
-    const cx = Math.floor(rnd() * W);
-    const cy = Math.floor(rnd() * H);
-    p.elipse(cx, cy, 14 + Math.floor(rnd() * 26), 8 + Math.floor(rnd() * 14), rnd() > 0.5 ? "#9CCE73" : "#AEDD85");
-  }
-  // tufos de grama
-  for (let i = 0; i < 1100; i++) {
-    const x = Math.floor(rnd() * W);
-    const y = Math.floor(rnd() * H);
-    const c = ["#8CC166", "#B9E591", "#92C96B", "#C2EA9A"][Math.floor(rnd() * 4)];
-    p.v(x, y, 2 + Math.floor(rnd() * 2), c);
-    if (rnd() < 0.4) p.v(x + 2, y + 1, 2, c);
-  }
-  // florzinhas
+/** Tufos de três risquinhos espalhados. */
+function pisoGrama(p: Caneta, W: number, H: number, rnd: () => number) {
   for (let i = 0; i < 90; i++) {
-    const x = Math.floor(rnd() * W);
-    const y = Math.floor(rnd() * H);
-    const c = ["#FFFFFF", "#FFE58A", "#F8B4D0", "#D8C6F8"][Math.floor(rnd() * 4)];
-    p.r(x, y, 2, 2, c);
-    p.p(x, y, clarear(c, 0.4));
+    const x = TILE + rnd() * (W - TILE * 2);
+    const y = TILE + rnd() * (H - TILE * 2);
+    p.linha([[x - 3, y], [x - 4.5, y - 4]]);
+    p.linha([[x, y], [x, y - 5.5]]);
+    p.linha([[x + 3, y], [x + 4.5, y - 4]]);
   }
 }
 
 // ---------------------------------------------------------------- tapetes, deck, caminho
 
-type TonsTapete = { base: string; borda: string; luz: string; ponto: string };
-const TAPETES: Record<string, TonsTapete> = {
-  lavanda: { base: "#D3CBF3", borda: "#AC9FE4", luz: "#E6E0FA", ponto: "#C5BBEE" },
-  lilas: { base: "#DDCDF3", borda: "#B99BE2", luz: "#EEE3FA", ponto: "#D0BDEE" },
-  pessego: { base: "#FBD8BE", borda: "#F1AE86", luz: "#FDE9D8", ponto: "#F6C8A6" },
-  verde: { base: "#CDE8C4", borda: "#9DCD92", luz: "#E2F3DC", ponto: "#BEDEB3" },
-  rosa: { base: "#F9D0E0", borda: "#EE9FC0", luz: "#FCE5EE", ponto: "#F3BDD3" },
-  menta: { base: "#C4EBDD", borda: "#8CD2B8", luz: "#DDF5EC", ponto: "#B2E0CF" },
-};
+/** Percorre a borda interna do tapete de `passo` em `passo` px. */
+function emBorda(x: number, y: number, w: number, h: number, passo: number, f: (px: number, py: number, horizontal: boolean) => void) {
+  for (let px = x + passo; px < x + w - passo / 2; px += passo) {
+    f(px, y, true);
+    f(px, y + h, true);
+  }
+  for (let py = y + passo; py < y + h - passo / 2; py += passo) {
+    f(x, py, false);
+    f(x + w, py, false);
+  }
+}
 
-function tapete(p: Pena, m: Movel, rnd: () => number) {
-  const t = TAPETES[m.variante ?? "lavanda"] ?? TAPETES.lavanda;
+function tapete(p: Caneta, m: Movel) {
+  const { meio: M } = MUNDO;
   const x = m.col * TILE + 2;
   const y = m.lin * TILE + 2;
   const w = m.larg * TILE - 4;
   const h = m.alt * TILE - 4;
-  p.sombraR(x + 1, y + 2, w, h, 0.1);
-  p.caixa(x, y, w, h, t.borda, 4);
-  p.caixa(x + 2, y + 2, w - 4, h - 4, t.base, 3);
-  p.caixa(x + 5, y + 5, w - 10, h - 10, t.luz, 2);
-  p.caixa(x + 6, y + 6, w - 12, h - 12, t.base, 2);
-  // textura de fibra
-  for (let i = 0; i < (w * h) / 26; i++) {
-    const px = x + 8 + Math.floor(rnd() * (w - 16));
-    const py = y + 8 + Math.floor(rnd() * (h - 16));
-    p.r(px, py, 2, 1, rnd() > 0.5 ? t.ponto : t.luz);
-  }
-  // losangos ao longo da borda interna
-  for (let px = x + 12; px < x + w - 10; px += 16) {
-    for (const py of [y + 3, y + h - 5]) {
-      p.r(px, py, 3, 2, t.borda);
-    }
-  }
-  for (let py = y + 12; py < y + h - 10; py += 16) {
-    for (const px of [x + 3, x + w - 5]) p.r(px, py, 2, 3, t.borda);
+  p.caixa(x, y, w, h, M, 7);
+  const ix = x + 5;
+  const iy = y + 5;
+  const iw = w - 10;
+  const ih = h - 10;
+  const estilo = m.variante ?? "lavanda";
+  if (estilo !== "menta") p.caixa(ix, iy, iw, ih, null, 4, FINO);
+  else p.forma((c) => c.roundRect(ix, iy, iw, ih, 4), null, 0), p.tracejada([[ix + 4, iy], [ix + iw - 4, iy], [ix + iw, iy + 4], [ix + iw, iy + ih - 4], [ix + iw - 4, iy + ih], [ix + 4, iy + ih], [ix, iy + ih - 4], [ix, iy + 4], [ix + 4, iy]], [4, 3]);
+  switch (estilo) {
+    case "lavanda":
+      emBorda(ix, iy, iw, ih, 14, (px, py) => p.ponto(px, py, 1.1));
+      break;
+    case "lilas":
+      emBorda(ix + 3, iy + 3, iw - 6, ih - 6, 12, (px, py, hz) => p.linha(hz ? [[px - 3, py - 1.5], [px, py + 1.5], [px + 3, py - 1.5]] : [[px - 1.5, py - 3], [px + 1.5, py], [px - 1.5, py + 3]]));
+      break;
+    case "pessego":
+      for (const px of [x - 3, x + w + 3]) for (let py = y + 8; py < y + h - 6; py += 8) p.linha([[px - 2.5, py], [px + 2.5, py]]);
+      for (const px of [ix + 6, ix + iw - 6]) for (let i = 0; i < 3; i++) p.linha([[px + (px < x + w / 2 ? 1 : -1) * i * 3, iy + 5], [px + (px < x + w / 2 ? 1 : -1) * i * 3, iy + ih - 5]]);
+      break;
+    case "verde":
+      emBorda(ix + 3, iy + 3, iw - 6, ih - 6, 18, (px, py) => {
+        p.linha([[px - 2, py], [px + 2, py]]);
+        p.linha([[px, py - 2], [px, py + 2]]);
+      });
+      break;
+    case "rosa":
+      emBorda(ix + 3, iy + 3, iw - 6, ih - 6, 16, (px, py) => p.poli([[px, py - 2.3], [px + 2.3, py], [px, py + 2.3], [px - 2.3, py]], null, FINO));
+      break;
+    default:
+      break;
   }
 }
 
-function deck(p: Pena, m: Movel, rnd: () => number) {
+function deck(p: Caneta, m: Movel, rnd: () => number) {
+  const { papel: P, meio: M, sombra: S } = MUNDO;
   const x = m.col * TILE;
   const y = m.lin * TILE;
   const w = m.larg * TILE;
   const h = m.alt * TILE;
-  // sombra no gramado e face frontal do deck
-  p.sombraR(x + 2, y + h - 1, w, 9, 0.16);
-  p.r(x, y + h - 6, w, 6, "#B98A5A");
-  p.r(x, y + h - 6, w, 1, "#D1A46F");
-  for (let i = 4; i < w; i += 14) p.v(x + i, y + h - 5, 5, "#9F7346");
-  const tons = ["#EBCF9F", "#E8CA98", "#EED3A5", "#E6C792"];
-  for (let r = 0; r < (h - 6) / 8; r++) {
-    const yy = y + r * 8;
-    let xx = x - Math.floor(rnd() * 40);
-    while (xx < x + w) {
-      const len = 56 + Math.floor(rnd() * 3) * 16;
-      const x0 = Math.max(x, xx);
-      const ww = Math.min(x + w, xx + len) - x0;
-      const tom = tons[Math.floor(rnd() * tons.length)];
-      const hh = Math.min(8, y + h - 6 - yy);
-      p.r(x0, yy, ww, hh, tom);
-      p.h(x0, yy, ww, clarear(tom, 0.35));
-      p.h(x0, yy + hh - 1, ww, mix(tom, "#9B7040", 0.4));
-      if (xx >= x) {
-        p.v(xx, yy, hh, mix(tom, "#9B7040", 0.4));
-        p.p(xx + 3, yy + 3, "#A8794A");
-      }
-      if (xx + len < x + w) p.p(xx + len - 4, yy + 3, "#A8794A");
-      xx += len;
-    }
+  p.chapa(x + 3, y + h - 2, w, 9, S, 3); // sombra no gramado
+  p.caixa(x, y + h - 10, w, 10, M, 3); // face frontal
+  for (let i = 12; i < w - 4; i += 16) p.linha([[x + i, y + h - 7], [x + i, y + h - 3]]);
+  p.caixa(x, y, w, h - 7, P, 4);
+  // três riscos de tábua em pontos soltos
+  for (let k = 0; k < 5; k++) {
+    const px = x + 10 + rnd() * (w - 50);
+    const py = y + 10 + rnd() * (h - 40);
+    tabuas(p, px, py, 26);
   }
-  p.r(x, y, w, 2, "#F3DDB4");
-  p.r(x, y, 2, h - 6, "#F3DDB4");
 }
 
-function caminho(p: Pena, m: Movel, rnd: () => number) {
+function caminho(p: Caneta, m: Movel, rnd: () => number) {
+  const { papel: P, sombra: S } = MUNDO;
   const x = m.col * TILE;
   const y = m.lin * TILE;
   for (let c = 0; c < m.larg; c++) {
@@ -193,297 +165,276 @@ function caminho(p: Pena, m: Movel, rnd: () => number) {
       const cx = x + c * TILE + 16;
       const cy = y + l * TILE + 16;
       for (const [dx, dy] of [[-8, -3], [9, 2], [-2, 10], [-3, -11]] as const) {
-        const rx = 7 + Math.floor(rnd() * 3);
-        const ry = 5 + Math.floor(rnd() * 2);
-        p.elipse(cx + dx + 1, cy + dy + 2, rx, ry, "rgba(58,47,91,0.14)");
-        p.elipse(cx + dx, cy + dy, rx, ry, "#C9C2B6");
-        p.elipse(cx + dx - 1, cy + dy - 1, rx - 1, ry - 1, "#E3DDD0");
-        p.elipse(cx + dx - 2, cy + dy - 2, rx - 4, ry - 3, "#EFEAE0");
+        const rx = 6 + Math.floor(rnd() * 3);
+        const ry = 4.5 + Math.floor(rnd() * 2);
+        p.chapaElipse(cx + dx + 1.5, cy + dy + 2, rx, ry, S);
+        p.elipse(cx + dx, cy + dy, rx, ry, P, TRACO);
       }
     }
   }
 }
 
-/** Contorno pontilhado claro no limite das Zonas: mostra onde a conversa fica isolada. */
-function bordaZonas(p: Pena, mapa: readonly string[]) {
-  const cor = "rgba(255,255,255,0.9)";
-  const sombra = "rgba(58,47,91,0.2)";
-  mapa.forEach((linha, lin) =>
-    [...linha].forEach((c, col) => {
-      if (!isZona(c)) return;
-      const x = col * TILE;
-      const y = lin * TILE;
-      const fora = (dc: number, dl: number) => {
-        const n = mapa[lin + dl]?.[col + dc];
-        return n !== c && n !== "M";
-      };
-      const tracejado = (x0: number, y0: number, horiz: boolean) => {
-        for (let i = 2; i < TILE - 2; i += 6) {
-          if (horiz) {
-            p.r(x0 + i, y0 + 1, 3, 1, sombra);
-            p.r(x0 + i, y0, 3, 1, cor);
-          } else {
-            p.r(x0 + 1, y0 + i, 1, 3, sombra);
-            p.r(x0, y0 + i, 1, 3, cor);
-          }
+// ---------------------------------------------------------------- Zonas
+
+export type Segmento = readonly [x0: number, y0: number, x1: number, y1: number];
+
+/** Folga do contorno da Zona para dentro da borda do tile. */
+const DENTRO = 2;
+
+/**
+ * Segmentos (em px) do contorno de uma Zona: um por trecho reto contínuo de borda exposta, recuado
+ * `DENTRO` px para dentro. Móvel dentro da Zona ('M') conta como parte dela.
+ */
+export function segmentosDaZona(mapa: readonly string[], letra: string): Segmento[] {
+  const dentro = (col: number, lin: number) => {
+    const c = mapa[lin]?.[col];
+    return c === letra || c === "M";
+  };
+  const ehZona = (col: number, lin: number) => mapa[lin]?.[col] === letra;
+  const saida: Segmento[] = [];
+  const lins = mapa.length;
+  const cols = mapa[0].length;
+  // bordas horizontais (cima e baixo)
+  for (const [dl, base] of [[-1, DENTRO], [1, TILE - DENTRO]] as const) {
+    for (let lin = 0; lin < lins; lin++) {
+      let ini = -1;
+      for (let col = 0; col <= cols; col++) {
+        const exposta = col < cols && ehZona(col, lin) && !dentro(col, lin + dl);
+        if (exposta && ini < 0) ini = col;
+        if (!exposta && ini >= 0) {
+          const x0 = ini * TILE + (dentro(ini - 1, lin) ? 0 : DENTRO);
+          const x1 = col * TILE - (dentro(col, lin) ? 0 : DENTRO);
+          saida.push([x0, lin * TILE + base, x1, lin * TILE + base]);
+          ini = -1;
         }
-      };
-      if (fora(0, -1)) tracejado(x, y + 1, true);
-      if (fora(0, 1)) tracejado(x, y + TILE - 3, true);
-      if (fora(-1, 0)) tracejado(x + 1, y, false);
-      if (fora(1, 0)) tracejado(x + TILE - 3, y, false);
-    }),
-  );
+      }
+    }
+  }
+  // bordas verticais (esquerda e direita)
+  for (const [dc, base] of [[-1, DENTRO], [1, TILE - DENTRO]] as const) {
+    for (let col = 0; col < cols; col++) {
+      let ini = -1;
+      for (let lin = 0; lin <= lins; lin++) {
+        const exposta = lin < lins && ehZona(col, lin) && !dentro(col + dc, lin);
+        if (exposta && ini < 0) ini = lin;
+        if (!exposta && ini >= 0) {
+          const y0 = ini * TILE + (dentro(col, ini - 1) ? 0 : DENTRO);
+          const y1 = lin * TILE - (dentro(col, lin) ? 0 : DENTRO);
+          saida.push([col * TILE + base, y0, col * TILE + base, y1]);
+          ini = -1;
+        }
+      }
+    }
+  }
+  return saida;
+}
+
+/** Contorno tracejado fino de tinta no limite de cada Zona: mostra onde a conversa fica isolada. */
+function bordaZonas(p: Caneta, mapa: readonly string[]) {
+  const letras = new Set<string>();
+  for (const linha of mapa) for (const c of linha) if (isZona(c)) letras.add(c);
+  for (const letra of letras)
+    for (const [x0, y0, x1, y1] of segmentosDaZona(mapa, letra)) p.tracejada([[x0, y0], [x1, y1]], [5, 4], FINO + 0.5);
+}
+
+export type ContornoZona = { canvas: HTMLCanvasElement; res: number; x: number; y: number };
+
+/** Contorno da Zona onde você está: amarelo sólido sobre uma linha de tinta (o amarelo da regra do tema). */
+export function contornoZonaAtiva(template: Template, letra: string, res: number): ContornoZona {
+  const segs = segmentosDaZona(TEMPLATES_LUGAR[template].mapa, letra);
+  const folga = 5;
+  const x0 = Math.min(...segs.map((s) => Math.min(s[0], s[2]))) - folga;
+  const y0 = Math.min(...segs.map((s) => Math.min(s[1], s[3]))) - folga;
+  const x1 = Math.max(...segs.map((s) => Math.max(s[0], s[2]))) + folga;
+  const y1 = Math.max(...segs.map((s) => Math.max(s[1], s[3]))) + folga;
+  const [canvas, p] = criarCanvas(x1 - x0, y1 - y0, res);
+  const q = p.em(-x0, -y0);
+  for (const [a, b, c, d] of segs) q.linha([[a, b], [c, d]], 5, MUNDO.tinta);
+  for (const [a, b, c, d] of segs) q.linha([[a, b], [c, d]], 2.5, MUNDO.amarelo);
+  return { canvas, res, x: x0, y: y0 };
 }
 
 // ---------------------------------------------------------------- decoração de parede
 
-function janela(p: Pena, m: Movel, rnd: () => number) {
+function janela(p: Caneta, m: Movel) {
+  const { papel: P, meio: M } = MUNDO;
   const x = m.col * TILE + 4;
-  const y = m.lin * TILE + 6;
+  const y = 6;
   const w = m.larg * TILE - 8;
   const h = 20;
-  p.sombraR(x + 1, y + h, w, 3, 0.12);
-  p.caixa(x, y, w, h, "#B8AFA0", 2);
-  p.caixa(x + 1, y + 1, w - 2, h - 2, "#FFFDF8", 2);
-  const vx = x + 3;
-  const vy = y + 3;
-  const vw = w - 6;
-  const vh = h - 6;
-  for (let i = 0; i < vh; i++) p.r(vx, vy + i, vw, 1, mix("#9ED2FF", "#E4F4FF", i / vh));
-  // nuvens e sol
-  const nx = vx + 4 + Math.floor(rnd() * (vw / 3));
-  p.elipse(nx, vy + 5, 5, 2, "#FFFFFF");
-  p.elipse(nx + 4, vy + 4, 4, 2, "#FFFFFF");
-  p.elipse(vx + vw - 8, vy + 4, 3, 3, "#FFF0B8");
-  // montanhas distantes
-  for (let i = 0; i < vw; i++) p.v(vx + i, vy + vh - 3 - Math.round(2 * Math.sin(i / 4 + 1)), 3 + Math.round(2 * Math.sin(i / 4 + 1)), "#9DCBA0");
+  p.caixa(x, y, w, h, P, 3);
+  const vx = x + 3.5;
+  const vy = y + 3.5;
+  const vw = w - 7;
+  const vh = h - 7;
+  p.caixa(vx, vy, vw, vh, M, 1.5, FINO);
+  // sol, nuvem e colinas
+  p.elipse(vx + vw - 7, vy + 4.5, 2.6, 2.6, P, FINO + 0.5);
+  p.nuvem([[vx + 6, vy + 4, 2.4], [vx + 9.5, vy + 3.4, 2.8], [vx + 13, vy + 4, 2.2]], P, null, FINO);
+  p.linha(Array.from({ length: Math.floor(vw / 2) + 1 }, (_, i): Ponto => [vx + i * 2, vy + vh - 1.5 - 2 * (0.5 + 0.5 * Math.sin(i / 2.2 + 1))]), FINO);
   // travessas
   const divs = m.larg * 2;
-  for (let i = 1; i < divs; i++) p.v(x + Math.round((w * i) / divs), y + 1, h - 2, "#FFFDF8");
-  p.h(x + 1, y + Math.floor(h / 2), w - 2, "#FFFDF8");
-  p.h(x + 1, y + h - 2, w - 2, "#E1DACB");
+  for (let i = 1; i < divs; i++) p.linha([[x + (w * i) / divs, y + 1], [x + (w * i) / divs, y + h - 1]], TRACO);
+  p.linha([[x + 1, y + h / 2], [x + w - 1, y + h / 2]], TRACO);
   // soleira
-  p.r(x - 2, y + h, w + 4, 2, "#FFFDF8");
-  p.r(x - 2, y + h + 2, w + 4, 1, "#D5CCBB");
+  p.caixa(x - 2, y + h - 1, w + 4, 4, P, 1.5);
 }
 
-function quadro(p: Pena, m: Movel, rnd: () => number) {
-  const x = m.col * TILE + (m.larg * TILE - (m.larg === 1 ? 20 : 44)) / 2;
-  const y = m.lin * TILE + 7;
+function quadro(p: Caneta, m: Movel) {
+  const { papel: P, meio: M, tinta: T } = MUNDO;
   const w = m.larg === 1 ? 20 : 44;
+  const x = m.col * TILE + (m.larg * TILE - w) / 2;
+  const y = 7;
   const h = 17;
-  p.sombraR(x + 1, y + 2, w, h, 0.12);
-  p.caixa(x, y, w, h, "#6E4D33", 1);
-  p.r(x + 1, y + 1, w - 2, h - 2, "#9B7448");
-  p.r(x + 2, y + 2, w - 4, h - 4, "#FFF9EE");
-  const fundo = m.variante === "b" ? "#F8D9CC" : "#D5E5F8";
-  p.r(x + 3, y + 3, w - 6, h - 6, fundo);
-  p.elipse(x + w * 0.3, y + 8, 4, 4, m.variante === "b" ? "#E98F86" : "#F5CB6E");
-  p.r(x + w * 0.5, y + 6, w * 0.25, h - 9, m.variante === "b" ? "#82A2F0" : "#7DCFB2");
-  p.elipse(x + w * 0.6, y + h - 3, 7, 3, m.variante === "b" ? "#7DCFB2" : "#F4A6C8");
-  void rnd;
+  p.caixa(x, y, w, h, P, 2);
+  p.caixa(x + 3, y + 3, w - 6, h - 6, M, 1, FINO);
+  if (m.variante === "b") {
+    p.elipse(x + w * 0.35, y + 8.5, 3.2, 3.2, T, 0);
+    p.caixa(x + w * 0.55, y + 5.5, w * 0.22, h - 11, P, 0.5, FINO + 0.5);
+  } else {
+    p.elipse(x + w * 0.32, y + 7.5, 2.4, 2.4, P, FINO + 0.5);
+    p.poli([[x + 3.5, y + h - 3.5], [x + w * 0.5, y + 8.5], [x + w - 3.5, y + h - 3.5]], T, 0);
+  }
 }
 
-function relogio(p: Pena, m: Movel) {
+function relogio(p: Caneta, m: Movel) {
+  const { papel: P, tinta: T } = MUNDO;
   const cx = m.col * TILE + 16;
-  const cy = m.lin * TILE + 15;
-  p.elipse(cx + 1, cy + 2, 9, 9, "rgba(58,47,91,0.14)");
-  p.elipse(cx, cy, 9, 9, "#6E4D33");
-  p.elipse(cx, cy, 8, 8, "#FFFDF8");
-  for (const [dx, dy] of [[0, -6], [6, 0], [0, 6], [-6, 0]] as const) p.r(cx + dx, cy + dy, 1, 1, "#5A4C72");
-  p.v(cx, cy - 5, 5, "#3C3A52");
-  p.h(cx, cy, 4, "#3C3A52");
-  p.p(cx, cy, "#E98F86");
+  const cy = 15;
+  p.elipse(cx, cy, 9.5, 9.5, P);
+  for (const [dx, dy] of [[0, -6.6], [6.6, 0], [0, 6.6], [-6.6, 0]] as const) p.ponto(cx + dx, cy + dy, 0.9);
+  p.linha([[cx, cy], [cx, cy - 5]], 1.6);
+  p.linha([[cx, cy], [cx + 3.4, cy]], 1.6);
+  p.ponto(cx, cy, 1.2, T);
 }
 
-function lousa(p: Pena, m: Movel, rnd: () => number) {
+function lousa(p: Caneta, m: Movel, rnd: () => number) {
+  const { papel: P, meio: M } = MUNDO;
   const x = m.col * TILE + 4;
-  const y = m.lin * TILE + 6;
+  const y = 6;
   const w = m.larg * TILE - 8;
   const h = 19;
-  p.sombraR(x + 1, y + 2, w, h, 0.12);
-  p.caixa(x, y, w, h, "#AAB3CC", 2);
-  p.caixa(x + 1, y + 1, w - 2, h - 2, "#FFFFFF", 2);
-  p.r(x + 2, y + 2, w - 4, 1, "#F1F3F9");
+  p.caixa(x, y, w, h, P, 2.5);
   // rabiscos
-  const cs = ["#82A2F0", "#F08A7C", "#7DCFB2"];
-  for (let i = 0; i < 4; i++) p.h(x + 5, y + 4 + i * 3, 10 + Math.floor(rnd() * (w - 40)), cs[i % 3]);
-  // post-its
-  const pcs = ["#F8E1A0", "#F4B8D0", "#BDE8D8"];
   for (let i = 0; i < 3; i++) {
-    const px = x + w - 14 - i * 11;
-    p.r(px, y + 4 + (i % 2) * 3, 8, 8, pcs[i]);
-    p.h(px + 1, y + 6 + (i % 2) * 3, 5, escurecer(pcs[i], 0.25));
+    const len = 14 + Math.floor(rnd() * (w - 56));
+    p.curva(x + 6, y + 6 + i * 4, x + 6 + len / 2, y + 4 + i * 4, x + 6 + len, y + 6 + i * 4);
   }
-  p.r(x + 4, y + h - 2, w - 8, 1, "#AAB3CC");
-  p.r(x + w / 2 - 6, y + h - 1, 12, 2, "#8A92B0");
+  // post-its
+  for (let i = 0; i < 3; i++) p.caixa(x + w - 14 - i * 11, y + 4 + (i % 2) * 3, 8, 8, M, 0.8, FINO + 0.5);
+  p.caixa(x + w / 2 - 6, y + h - 1, 12, 3, M, 1.2, FINO + 0.5);
 }
 
 // ---------------------------------------------------------------- paredes
 
-function paredeInterna(p: Pena, tema: Tema["parede"], mapa: readonly string[], W: number, H: number, rnd: () => number) {
-  const cols = mapa[0].length;
-  const lins = mapa.length;
-  // sombra das paredes no chão (luz vem de cima à esquerda)
-  for (let c = 1; c < cols - 1; c++) {
-    if (mapa[0][c] === "#" || isPorta(mapa[0][c])) {
-      for (let i = 0; i < 9; i++) p.r(c * TILE, TILE + i, TILE, 1, `rgba(58,47,91,${(0.2 * (9 - i)) / 9})`);
-    }
-  }
-  for (let l = 1; l < lins - 1; l++) {
-    if (mapa[l][0] === "#") for (let i = 0; i < 7; i++) p.r(TILE + i, l * TILE, 1, TILE, `rgba(58,47,91,${(0.17 * (7 - i)) / 7})`);
-  }
+/** Porta no tile (col, lin)? */
+const portaNo = (mapa: readonly string[], col: number, lin: number) => isPorta(mapa[lin]?.[col]);
 
-  for (let l = 0; l < lins; l++) {
-    for (let c = 0; c < cols; c++) {
-      const ch = mapa[l][c];
-      if (ch !== "#") continue;
-      const x = c * TILE;
-      const y = l * TILE;
-      if (l === 0 && c > 0 && c < cols - 1) {
-        // face frontal: tampo escuro, papel de parede e rodapé
-        p.r(x, y, TILE, 5, tema.cap);
-        p.r(x, y, TILE, 1, tema.capLuz);
-        p.r(x, y + 5, TILE, 1, mix(tema.cap, "#000000", 0.15));
-        p.r(x, y + 6, TILE, 20, tema.face);
-        for (let i = 0; i < TILE; i += 8) p.r(x + i, y + 6, 4, 20, mix(tema.face, tema.faceSombra, 0.55)); // listras
-        p.r(x, y + 6, TILE, 2, mix(tema.face, tema.faceSombra, 0.9)); // sombra sob o tampo
-        p.r(x, y + 26, TILE, 6, tema.rodape);
-        p.r(x, y + 26, TILE, 1, tema.rodapeLuz);
-        p.r(x, y + 31, TILE, 1, mix(tema.rodape, "#3a2f5b", 0.3));
-      } else if (l === lins - 1 && c > 0 && c < cols - 1) {
-        // parede de baixo: só o tampo aparece
-        p.r(x, y, TILE, TILE, tema.cap);
-        p.r(x, y, TILE, 3, tema.capLuz);
-        p.r(x, y + 3, TILE, 1, mix(tema.cap, "#000000", 0.12));
-        for (let i = 0; i < 6; i++) p.r(x + Math.floor(rnd() * TILE), y + 8 + Math.floor(rnd() * 20), 2, 1, mix(tema.cap, "#ffffff", 0.08));
-      } else {
-        // lateral/canto: só o tampo; a face voltada para dentro ganha um filete de luz
-        p.r(x, y, TILE, TILE, tema.cap);
-        if (c === 0 && l > 0 && l < lins - 1) {
-          p.r(x + TILE - 3, y, 3, TILE, tema.capLuz);
-          p.r(x + TILE - 4, y, 1, TILE, mix(tema.cap, "#000000", 0.12));
-        } else if (c === cols - 1 && l > 0 && l < lins - 1) {
-          p.r(x, y, 3, TILE, tema.capLuz);
-          p.r(x + 3, y, 1, TILE, mix(tema.cap, "#000000", 0.12));
-        } else if (l === 0) {
-          p.r(x, y, TILE, 2, tema.capLuz);
-        }
-        for (let i = 0; i < 5; i++) p.r(x + 4 + Math.floor(rnd() * 22), y + Math.floor(rnd() * TILE), 2, 1, mix(tema.cap, "#ffffff", 0.08));
-      }
+/** Chama `f(i0, i1)` para cada trecho contínuo de índices `[i0, i1)` em `[de, ate)` que não é porta. */
+function trechos(de: number, ate: number, ehPorta: (i: number) => boolean, f: (i0: number, i1: number) => void) {
+  let ini = -1;
+  for (let i = de; i <= ate; i++) {
+    const ok = i < ate && !ehPorta(i);
+    if (ok && ini < 0) ini = i;
+    if (!ok && ini >= 0) {
+      f(ini, i);
+      ini = -1;
     }
   }
-  void W;
-  void H;
 }
 
-function sebe(p: Pena, tema: Tema["parede"], mapa: readonly string[], rnd: () => number) {
+/** Contorno do limite entre a parede e o chão, interrompido nas portas. */
+function contornoParede(p: Caneta, mapa: readonly string[]) {
   const cols = mapa[0].length;
   const lins = mapa.length;
-  const moita = (x: number, y: number, w: number, h: number) => {
-    p.r(x, y, w, h, tema.face);
-    for (let i = 0; i < (w * h) / 10; i++) {
-      const px = x + Math.floor(rnd() * w);
-      const py = y + Math.floor(rnd() * h);
-      const c = [tema.capLuz, tema.faceSombra, tema.cap, tema.face][Math.floor(rnd() * 4)];
-      p.r(px, py, 2 + Math.floor(rnd() * 2), 2, c);
-    }
-  };
-  for (let l = 0; l < lins; l++) {
-    for (let c = 0; c < cols; c++) {
-      if (mapa[l][c] !== "#") continue;
-      const x = c * TILE;
-      const y = l * TILE;
-      if (l === 0 && c > 0 && c < cols - 1) {
-        moita(x, y, TILE, TILE);
-        p.r(x, y, TILE, 6, tema.cap);
-        for (let i = 0; i < 8; i++) p.r(x + Math.floor(rnd() * TILE), y + 4 + Math.floor(rnd() * 3), 2, 2, tema.capLuz);
-        p.r(x, y + 26, TILE, 6, tema.rodape);
-        for (let i = 0; i < 6; i++) p.r(x + Math.floor(rnd() * TILE), y + 26 + Math.floor(rnd() * 4), 3, 2, tema.faceSombra);
-      } else {
-        moita(x, y, TILE, TILE);
-        p.r(x, y, TILE, 4, tema.capLuz);
-        for (let i = 0; i < 8; i++) p.r(x + Math.floor(rnd() * TILE), y + Math.floor(rnd() * TILE), 3, 2, tema.cap);
-        if (c === 0) p.r(x + TILE - 3, y, 3, TILE, tema.rodape);
-        else if (c === cols - 1) p.r(x, y, 3, TILE, tema.rodape);
-        else if (l === lins - 1) p.r(x, y, TILE, 3, tema.rodape);
-      }
-    }
+  const W = cols * TILE;
+  const H = lins * TILE;
+  trechos(1, cols - 1, (c) => portaNo(mapa, c, 0), (a, b) => p.linha([[a * TILE, TILE], [b * TILE, TILE]], TRACO));
+  trechos(1, cols - 1, (c) => portaNo(mapa, c, lins - 1), (a, b) => p.linha([[a * TILE, H - TILE], [b * TILE, H - TILE]], TRACO));
+  trechos(1, lins - 1, (l) => portaNo(mapa, 0, l), (a, b) => p.linha([[TILE, a * TILE], [TILE, b * TILE]], TRACO));
+  trechos(1, lins - 1, (l) => portaNo(mapa, cols - 1, l), (a, b) => p.linha([[W - TILE, a * TILE], [W - TILE, b * TILE]], TRACO));
+}
+
+function paredeInterna(p: Caneta, mapa: readonly string[], W: number, H: number, rnd: () => number) {
+  const { parede, meio, sombra } = MUNDO;
+  const cols = mapa[0].length;
+  const lins = mapa.length;
+
+  // sombra chapada das paredes no chão (a luz vem de cima à esquerda)
+  for (let c = 1; c < cols - 1; c++) if (!portaNo(mapa, c, 0)) p.chapa(c * TILE, TILE, TILE, 9, sombra);
+  for (let l = 1; l < lins - 1; l++) if (!portaNo(mapa, 0, l)) p.chapa(TILE, l * TILE, 7, TILE, sombra);
+
+  // topo das paredes visto de cima, com um filete mais claro na face voltada para dentro
+  p.chapa(0, 0, W, TILE, sombra);
+  p.chapa(0, H - TILE, W, TILE, sombra);
+  p.chapa(0, TILE, TILE, H - TILE * 2, sombra);
+  p.chapa(W - TILE, TILE, TILE, H - TILE * 2, sombra);
+  p.chapa(TILE, H - TILE, W - TILE * 2, 5, meio);
+  p.chapa(TILE - 5, TILE, 5, H - TILE * 2, meio);
+  p.chapa(W - TILE, TILE, 5, H - TILE * 2, meio);
+
+  // face frontal da parede do fundo: tampo, parede clara e rodapé
+  p.chapa(TILE, 0, W - TILE * 2, TILE, parede);
+  p.chapa(TILE, 0, W - TILE * 2, 5, sombra);
+  p.chapa(TILE, 26, W - TILE * 2, 6, meio);
+  p.linha([[TILE, 5], [W - TILE, 5]], 1.5);
+  p.linha([[TILE, 26], [W - TILE, 26]], 1.5);
+  // rara: uma emenda de painel de vez em quando
+  for (let c = 2; c < cols - 2; c++) if (!portaNo(mapa, c, 0) && rnd() < 0.18) p.linha([[c * TILE + 16, 9], [c * TILE + 16, 23]]);
+
+  contornoParede(p, mapa);
+  p.forma((c) => c.rect(1, 1, W - 2, H - 2), null, TRACO);
+}
+
+/** Trilha do limite interno da sebe: moitas de 16 px que avançam para o chão. Nas portas, reta (e, para o traço, sem linha). */
+function trilhaSebe(c: CanvasRenderingContext2D, mapa: readonly string[], W: number, H: number, oy: number, contorno: boolean) {
+  const cols = mapa[0].length;
+  const lins = mapa.length;
+  const R = 8;
+  const reta = (x: number, y: number) => (contorno ? c.moveTo(x, y) : c.lineTo(x, y));
+  c.moveTo(TILE, TILE + oy);
+  for (let t = 1; t < cols - 1; t++) {
+    if (portaNo(mapa, t, 0)) reta((t + 1) * TILE, TILE + oy);
+    else for (let k = 0; k < 2; k++) c.arc(t * TILE + R + k * 2 * R, TILE + oy, R, Math.PI, 0, true);
   }
-  // sombra da sebe sobre o gramado
-  for (let c = 1; c < cols - 1; c++) if (mapa[0][c] === "#") p.r(c * TILE, TILE, TILE, 4, "rgba(58,100,58,0.25)");
+  for (let t = 1; t < lins - 1; t++) {
+    if (portaNo(mapa, cols - 1, t)) reta(W - TILE, (t + 1) * TILE + oy);
+    else for (let k = 0; k < 2; k++) c.arc(W - TILE, t * TILE + R + k * 2 * R + oy, R, -Math.PI / 2, Math.PI / 2, true);
+  }
+  for (let t = cols - 2; t >= 1; t--) {
+    if (portaNo(mapa, t, lins - 1)) reta(t * TILE, H - TILE + oy);
+    else for (let k = 1; k >= 0; k--) c.arc(t * TILE + R + k * 2 * R, H - TILE + oy, R, 0, Math.PI, true);
+  }
+  for (let t = lins - 2; t >= 1; t--) {
+    if (portaNo(mapa, 0, t)) reta(TILE, t * TILE + oy);
+    else for (let k = 1; k >= 0; k--) c.arc(TILE, t * TILE + R + k * 2 * R + oy, R, Math.PI / 2, -Math.PI / 2, true);
+  }
+  if (!contorno) c.closePath();
+}
+
+function sebe(p: Caneta, mapa: readonly string[], W: number, H: number, rnd: () => number) {
+  const { parede, sombra } = MUNDO;
+  const massa = (oy: number) => (c: CanvasRenderingContext2D) => {
+    c.rect(-4, -4 + oy, W + 8, H + 8);
+    trilhaSebe(c, mapa, W, H, oy, false);
+  };
+  p.forma(massa(5), sombra, 0, "evenodd"); // sombra chapada no gramado
+  p.forma(massa(0), parede, 0, "evenodd");
+  // moitas: curvinhas de folha em pontos soltos
+  for (let i = 0; i < 46; i++) {
+    const lado = Math.floor(rnd() * 4);
+    const x = lado < 2 ? TILE + rnd() * (W - TILE * 2) : lado === 2 ? 6 + rnd() * 18 : W - 24 + rnd() * 18;
+    const y = lado === 0 ? 4 + rnd() * 18 : lado === 1 ? H - 26 + rnd() * 18 : TILE + rnd() * (H - TILE * 2);
+    if (portaNo(mapa, Math.floor(x / TILE), Math.floor(y / TILE))) continue;
+    p.forma((c) => c.arc(x, y, 2.6, Math.PI * 0.15, Math.PI * 1.35), null, FINO);
+  }
+  p.forma((c) => trilhaSebe(c, mapa, W, H, 0, true), null, TRACO);
+  p.forma((c) => c.rect(1, 1, W - 2, H - 2), null, TRACO);
 }
 
 // ---------------------------------------------------------------- portas
 
-function portaVisual(p: Pena, tema: Tema, template: Template, col: number, lin: number, lado: Lado, rnd: () => number) {
-  const x = col * TILE;
-  const y = lin * TILE;
-  const externo = tema.clima === "externo";
-  const luzQuente = (i: number, n: number) => mix("#FFF4D6", "#F8D79A", i / n);
-  if (lado === "baixo") {
-    // porta aberta na face da parede de cima
-    p.r(x, y, TILE, TILE, tema.parede.cap);
-    p.r(x + 3, y + 5, TILE - 6, TILE - 5, "#2E2946");
-    for (let i = 0; i < TILE - 5; i++) p.r(x + 3, y + 5 + i, TILE - 6, 1, mix("#2E2946", "#6D6690", i / (TILE - 5)));
-    p.r(x + 3, y + 5, TILE - 6, 2, "#1F1B33");
-    // batentes claros
-    p.r(x + 1, y + 4, 3, TILE - 4, "#FAF5EA");
-    p.r(x + TILE - 4, y + 4, 3, TILE - 4, "#FAF5EA");
-    p.r(x + 3, y + 4, 1, TILE - 4, "#D9CFBE");
-    p.r(x + TILE - 4, y + 4, 1, TILE - 4, "#D9CFBE");
-    p.r(x, y, TILE, 5, tema.parede.cap);
-    p.r(x, y, TILE, 1, tema.parede.capLuz);
-    p.r(x, y + 4, TILE, 2, "#FAF5EA");
-    p.r(x + 4, y + TILE - 3, TILE - 8, 3, luzQuente(1, 1)); // luz no chão da passagem
-    p.r(x + 4, y + TILE - 4, TILE - 8, 1, "#FFE9B8");
-  } else if (lado === "cima") {
-    // gap na parede de baixo: luz entrando
-    p.r(x, y, TILE, TILE, tema.parede.cap);
-    for (let i = 0; i < TILE; i++) p.r(x + 4, y + i, TILE - 8, 1, mix("#F9E5B9", "#FFF8E6", i / TILE));
-    p.r(x + 4, y, TILE - 8, 3, "rgba(58,47,91,0.22)");
-    p.r(x + 4, y, 1, TILE, "#D9CFBE");
-    p.r(x + TILE - 5, y, 1, TILE, "#D9CFBE");
-    p.r(x, y, 5, TILE, tema.parede.cap);
-    p.r(x + TILE - 5, y, 5, TILE, tema.parede.cap);
-    p.r(x + 3, y, 2, TILE, tema.parede.capLuz);
-    p.r(x + TILE - 5, y, 2, TILE, tema.parede.capLuz);
-    // degrau
-    p.r(x + 5, y + TILE - 6, TILE - 10, 6, "#E3D3B5");
-    p.r(x + 5, y + TILE - 6, TILE - 10, 1, "#F4E9D1");
-  } else {
-    // parede lateral: vão com soleira e batentes
-    const dir = lado === "esquerda"; // porta na parede direita; entra-se pela esquerda
-    p.r(x, y, TILE, TILE, externo ? "#A5D67C" : tema.parede.cap);
-    if (externo) {
-      // portão na sebe
-      for (let i = 0; i < TILE; i++) p.r(x + i, y, 1, TILE, mix("#D6EEB8", "#A5D67C", i / TILE));
-      for (let i = 0; i < 6; i++) p.r(x + Math.floor(rnd() * TILE), y + 6 + Math.floor(rnd() * 20), 2, 2, "#8CC166");
-      // dois mourões de madeira marcam o portão
-      for (const py of [y - 2, y + TILE - 8]) {
-        p.sombraR(x + 7, py + 7, 18, 3, 0.2);
-        p.caixa(x + 8, py, 16, 10, "#6E4D33", 2);
-        p.caixa(x + 9, py + 1, 14, 8, "#A47A4C", 2);
-        p.r(x + 10, py + 1, 12, 2, "#C99C68");
-        p.r(x + 9, py + 6, 14, 1, "#8A6343");
-      }
-    } else {
-      const ax = dir ? x : x;
-      for (let i = 0; i < TILE; i++) p.r(ax + i, y + 5, 1, TILE - 10, mix(dir ? "#FFF8E6" : "#F9E5B9", dir ? "#F9E5B9" : "#FFF8E6", i / TILE));
-      p.r(x, y + 5, TILE, 2, "rgba(58,47,91,0.2)");
-      for (const py of [y, y + TILE - 6]) {
-        p.r(x, py, TILE, 6, tema.parede.cap);
-        p.r(x, py + (py === y ? 4 : 0), TILE, 2, "#FAF5EA");
-      }
-      // soleira
-      p.r(dir ? x : x + TILE - 6, y + 7, 6, TILE - 14, "#E3D3B5");
-    }
-  }
-  void template;
-}
-
-function capacho(p: Pena, col: number, lin: number, lado: Lado, tema: Tema) {
+function capacho(p: Caneta, col: number, lin: number, lado: Lado) {
   // tapete no tile de chão à frente da porta (onde o Avatar chega)
   const cx = col * TILE + 16;
   const cy = lin * TILE + 16;
@@ -493,19 +444,49 @@ function capacho(p: Pena, col: number, lin: number, lado: Lado, tema: Tema) {
   const h = horiz ? 14 : 26;
   const x = cx + dx - w / 2;
   const y = cy + dy - h / 2;
-  const base = tema.clima === "externo" ? "#C9A070" : "#D9A98B";
-  p.caixa(x, y, w, h, escurecer(base, 0.25), 2);
-  p.caixa(x + 1, y + 1, w - 2, h - 2, base, 2);
-  for (let i = 3; i < (horiz ? w - 3 : h - 3); i += 3) {
-    if (horiz) p.v(x + i, y + 3, h - 6, clarear(base, 0.25));
-    else p.h(x + 3, y + i, w - 6, clarear(base, 0.25));
+  p.caixa(x, y, w, h, MUNDO.meio, 3);
+  for (let i = 5; i < (horiz ? w - 3 : h - 3); i += 4) {
+    if (horiz) p.linha([[x + i, y + 4], [x + i, y + h - 4]]);
+    else p.linha([[x + 4, y + i], [x + w - 4, y + i]]);
+  }
+}
+
+function portaVisual(p: Caneta, tema: Tema, col: number, lin: number, lado: Lado) {
+  const { papel: P, meio: M, sombra: S, tinta: T, chao } = MUNDO;
+  const x = col * TILE;
+  const y = lin * TILE;
+  if (lado === "baixo") {
+    // porta aberta na face da parede de cima: vão escuro com batente e a luz da passagem no chão
+    p.poli([[x + 6, y + TILE + 1], [x + TILE - 6, y + TILE + 1], [x + TILE - 1, y + TILE + 12], [x + 1, y + TILE + 12]], P, 0);
+    p.caixa(x + 2, y + 3, TILE - 4, TILE - 1, P, 3, 0);
+    p.poli([[x + 2, y + TILE + 1], [x + 2, y + 6], [x + 5, y + 3], [x + TILE - 5, y + 3], [x + TILE - 2, y + 6], [x + TILE - 2, y + TILE + 1]], null, TRACO, false);
+    p.caixa(x + 6, y + 7, TILE - 12, TILE - 6, T, 2, 0);
+  } else if (lado === "cima") {
+    // vão na parede de baixo: batentes de tinta e a luz de fora
+    p.chapa(x + 5, y - 1, TILE - 10, TILE + 2, P);
+    p.linha([[x + 5, y - 1], [x + 5, y + TILE]], TRACO);
+    p.linha([[x + TILE - 5, y - 1], [x + TILE - 5, y + TILE]], TRACO);
+    p.caixa(x + 7, y + 1, TILE - 14, 6, M, 2, FINO + 0.5); // degrau
+  } else if (tema.clima === "externo") {
+    // portão na sebe: dois mourões marcam a passagem
+    p.chapa(x - 1, y, TILE + 2, TILE, chao);
+    p.chapaElipse(x + 17, y + 6, 10, 3, S);
+    p.chapaElipse(x + 17, y + TILE - 2, 10, 3, S);
+    for (const py of [y - 2, y + TILE - 8]) p.caixa(x + 8, py, 16, 10, M, 3);
+  } else {
+    // parede lateral: vão com batentes de tinta e soleira
+    const dir = lado === "esquerda"; // porta na parede direita; entra-se pela esquerda
+    p.chapa(x - 1, y + 5, TILE + 2, TILE - 10, P);
+    p.linha([[x - 1, y + 5], [x + TILE + 1, y + 5]], TRACO);
+    p.linha([[x - 1, y + TILE - 5], [x + TILE + 1, y + TILE - 5]], TRACO);
+    p.caixa(dir ? x : x + TILE - 7, y + 8, 7, TILE - 16, M, 2, FINO + 0.5); // soleira
   }
 }
 
 // ---------------------------------------------------------------- API
 
-/** Desenha o chão, as paredes, os tapetes, a decoração de parede e as portas do Lugar (canvas 1x). */
-export function desenharMapa(template: Template): HTMLCanvasElement {
+/** Desenha o chão, as paredes, os tapetes, a decoração de parede e as portas do Lugar (canvas com `res` px por unidade). */
+export function desenharMapa(template: Template, res: number): HTMLCanvasElement {
   const t = TEMPLATES_LUGAR[template];
   const tema = TEMAS[template];
   const mapa = t.mapa;
@@ -513,11 +494,12 @@ export function desenharMapa(template: Template): HTMLCanvasElement {
   const cols = mapa[0].length;
   const W = cols * TILE;
   const H = lins * TILE;
-  const [canvas, p] = criarCanvas(W, H);
+  const [canvas, p] = criarCanvas(W, H, res);
   const rnd = aleatorio(hashTexto(template));
 
-  if (template === "sala") pisoMadeira(p, W, H, rnd);
-  else if (template === "escritorio") pisoAzulejo(p, W, H, rnd);
+  p.chapa(0, 0, W, H, MUNDO.chao);
+  if (tema.piso === "tabua") pisoTabua(p, W, H, rnd);
+  else if (tema.piso === "ladrilho") pisoLadrilho(p, W, H);
   else pisoGrama(p, W, H, rnd);
 
   for (const m of t.moveis) {
@@ -525,78 +507,77 @@ export function desenharMapa(template: Template): HTMLCanvasElement {
     if (m.tipo === "deck") deck(p, m, r);
     else if (m.tipo === "caminho") caminho(p, m, r);
   }
-  for (const m of t.moveis) {
-    const r = aleatorio(hashTexto(`${m.tipo}${m.col},${m.lin}`));
-    if (m.tipo === "tapete") tapete(p, m, r);
-  }
+  for (const m of t.moveis) if (m.tipo === "tapete") tapete(p, m);
 
   bordaZonas(p, mapa);
 
-  if (tema.clima === "externo") sebe(p, tema.parede, mapa, rnd);
-  else paredeInterna(p, tema.parede, mapa, W, H, rnd);
+  if (tema.clima === "externo") sebe(p, mapa, W, H, rnd);
+  else paredeInterna(p, mapa, W, H, rnd);
 
   for (const m of t.moveis) {
     if (!TIPOS_PAREDE.has(m.tipo)) continue;
     const r = aleatorio(hashTexto(`${m.tipo}${m.col},${m.lin}`));
-    if (m.tipo === "janela") janela(p, m, r);
-    else if (m.tipo === "quadro") quadro(p, m, r);
+    if (m.tipo === "janela") janela(p, m);
+    else if (m.tipo === "quadro") quadro(p, m);
     else if (m.tipo === "relogio") relogio(p, m);
     else if (m.tipo === "lousa") lousa(p, m, r);
   }
 
   for (const porta of portasDoMapa(template, () => "")) {
-    if (tema.clima === "interno") capacho(p, porta.col, porta.lin, porta.lado, tema);
-    portaVisual(p, tema, template, porta.col, porta.lin, porta.lado, rnd);
+    if (tema.clima === "interno") capacho(p, porta.col, porta.lin, porta.lado);
+    portaVisual(p, tema, porta.col, porta.lin, porta.lado);
   }
   return canvas;
 }
 
-const objetosCache = new Map<Template, ObjetoMapa[]>();
+const objetosCache = new Map<string, ObjetoMapa[]>();
 
 /** Sprites ordenáveis por profundidade: cada Móvel com desenho próprio (e as luzinhas). */
-export function objetosDoMapa(template: Template): ObjetoMapa[] {
-  const guardado = objetosCache.get(template);
+export function objetosDoMapa(template: Template, res: number): ObjetoMapa[] {
+  const guardado = objetosCache.get(`${template}:${res}`);
   if (guardado) return guardado;
   const saida: ObjetoMapa[] = [];
   for (const m of TEMPLATES_LUGAR[template].moveis) {
     if (m.tipo === "luzinhas") {
-      saida.push(luzinhas(template, m));
+      saida.push(luzinhas(template, m, res));
       continue;
     }
-    const s = desenharMovel(m);
+    const s = desenharMovel(m, res);
     if (!s) continue;
     saida.push({
-      chave: `mov:${template}:${m.tipo}:${m.col},${m.lin}`,
+      chave: `mov:${template}:${m.tipo}:${m.col},${m.lin}:${res}`,
       canvas: s.canvas,
+      res,
       x: m.col * TILE + s.dx,
       y: m.lin * TILE + s.dy,
       // profundidade pela base: o Avatar (pela sola) passa atrás de quem está mais abaixo
       depth: (movelSolido(m) ? baseSolida(m).y + baseSolida(m).alt : (m.lin + m.alt) * TILE) + s.prof,
+      movel: m,
     });
   }
-  objetosCache.set(template, saida);
+  objetosCache.set(`${template}:${res}`, saida);
   return saida;
 }
 
 /** Fio de luzinhas pendurado entre dois pontos (fica sempre acima dos Avatares). */
-function luzinhas(template: Template, m: Movel): ObjetoMapa {
+function luzinhas(template: Template, m: Movel, res: number): ObjetoMapa {
   const L = m.larg * TILE;
   const sag = 14;
-  const [canvas, p] = criarCanvas(L + 16, sag + 28);
+  const [canvas, p] = criarCanvas(L + 16, sag + 28, res);
   const y0 = 6;
-  const yDe = (x: number) => y0 + Math.round(sag * (1 - Math.pow((2 * x) / L - 1, 2)));
-  for (let x = 0; x <= L; x++) p.r(x + 8, yDe(x), 1, 1, "rgba(91,75,110,0.85)");
-  const cores = ["#FFE08A", "#FFB3A0", "#FFF3C4", "#B8E4FF", "#F8BFE0"];
+  const yDe = (x: number) => y0 + sag * (1 - Math.pow((2 * x) / L - 1, 2));
+  p.linha(Array.from({ length: Math.floor(L / 4) + 1 }, (_, i): Ponto => [8 + i * 4, yDe(i * 4)]), 1.5);
   let i = 0;
   for (let x = 10; x < L; x += 18) {
     const y = yDe(x) + 1;
-    p.elipse(x + 8, y + 4, 6, 6, `${cores[i % cores.length]}30`);
-    p.elipse(x + 8, y + 4, 3, 3, `${cores[i % cores.length]}66`);
-    p.r(x + 7, y + 1, 3, 4, cores[i % cores.length]);
-    p.p(x + 7, y + 1, "#ffffff");
+    p.caixa(x + 6.5, y, 3, 3, MUNDO.tinta, 0.8, 0);
+    p.elipse(x + 8, y + 7, 3.4, 3.8, i % 2 ? MUNDO.meio : MUNDO.papel, FINO + 0.5);
+    p.linha([[x + 2, y + 7], [x, y + 7]]);
+    p.linha([[x + 14, y + 7], [x + 16, y + 7]]);
+    p.linha([[x + 8, y + 13], [x + 8, y + 15]]);
     i++;
   }
-  return { chave: `mov:${template}:luzinhas:${m.col},${m.lin}`, canvas, x: m.col * TILE - 8, y: m.lin * TILE - y0 + 4, depth: 900000 };
+  return { chave: `mov:${template}:luzinhas:${m.col},${m.lin}:${res}`, canvas, res, x: m.col * TILE - 8, y: m.lin * TILE - y0 + 4, depth: 900000, movel: m };
 }
 
 /** Portas do mapa com o lado por onde se entra (para posicionar o rótulo com o nome do destino). */
@@ -634,4 +615,3 @@ export function zonasDoMapa(template: Template): ZonaMapa[] {
   });
   return [...achadas.values()];
 }
-

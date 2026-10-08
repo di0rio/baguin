@@ -1,15 +1,19 @@
 import { CATALOGO, type Pecas } from "@baguin/shared";
 
-const sorteia = <T>(lista: readonly T[]): T => lista[Math.floor(Math.random() * lista.length)];
-const indice = (n: number) => Math.floor(Math.random() * n);
+/** Sorteia usando `rnd` (0 <= x < 1). */
+function sortear(rnd: () => number): Pecas {
+  const de = <T>(lista: readonly T[]): T => lista[Math.floor(rnd() * lista.length)];
+  return {
+    altura: de(CATALOGO.alturas),
+    cabelo: { estilo: de(CATALOGO.cabelos), preenchimento: de(CATALOGO.lisos) },
+    roupa: { preenchimento: de([...CATALOGO.lisos, ...CATALOGO.estampas]) },
+    calca: { preenchimento: de(CATALOGO.lisos) },
+    rosto: de(CATALOGO.rostos),
+    acessorio: de(CATALOGO.acessorios),
+  };
+}
 
-export const aleatorio = (): Pecas => ({
-  pele: indice(CATALOGO.pele),
-  cabelo: { estilo: sorteia(CATALOGO.cabeloEstilos), cor: indice(CATALOGO.cabeloCores) },
-  roupa: { estilo: sorteia(CATALOGO.roupaEstilos), cor: indice(CATALOGO.roupaCores) },
-  calca: indice(CATALOGO.calcaCores),
-  acessorio: sorteia(CATALOGO.acessorios),
-});
+export const aleatorio = (): Pecas => sortear(Math.random);
 
 /** Gerador determinístico (mulberry32): o mesmo texto sempre dá os mesmos Avatares. */
 function semente(texto: string) {
@@ -28,21 +32,13 @@ function semente(texto: string) {
 /** Avatares estáveis para decorar a capa de um Espaço. */
 export function galeraDe(texto: string, quantos: number): Pecas[] {
   const rnd = semente(texto);
-  const i = (n: number) => Math.floor(rnd() * n);
-  const de = <T>(l: readonly T[]) => l[i(l.length)];
-  return Array.from({ length: quantos }, () => ({
-    pele: i(CATALOGO.pele),
-    cabelo: { estilo: de(CATALOGO.cabeloEstilos), cor: i(CATALOGO.cabeloCores) },
-    roupa: { estilo: de(CATALOGO.roupaEstilos), cor: i(CATALOGO.roupaCores) },
-    calca: i(CATALOGO.calcaCores),
-    acessorio: de(CATALOGO.acessorios),
-  }));
+  return Array.from({ length: quantos }, () => sortear(rnd));
 }
 
 /** Galera de exemplo da vitrine do login (só decoração). */
 export const PECAS_VITRINE: Pecas[] = [
-  { pele: 0, cabelo: { estilo: "longo", cor: 4 }, roupa: { estilo: "moletom", cor: 5 }, calca: 2, acessorio: "oculos" },
-  { pele: 3, cabelo: { estilo: "curto", cor: 1 }, roupa: { estilo: "camiseta", cor: 2 }, calca: 0, acessorio: "fone" },
-  { pele: 2, cabelo: { estilo: "blackpower", cor: 0 }, roupa: { estilo: "regata", cor: 7 }, calca: 3, acessorio: "nenhum" },
-  { pele: 4, cabelo: { estilo: "rabo", cor: 3 }, roupa: { estilo: "camiseta", cor: 9 }, calca: 1, acessorio: "chapeu" },
+  { altura: "baixo", cabelo: { estilo: "coque", preenchimento: "tinta" }, roupa: { preenchimento: "bolinha" }, calca: { preenchimento: "tinta" }, rosto: "feliz", acessorio: "oculos" },
+  { altura: "medio", cabelo: { estilo: "espetado", preenchimento: "tinta" }, roupa: { preenchimento: "listra" }, calca: { preenchimento: "tinta" }, rosto: "sono", acessorio: "nenhum" },
+  { altura: "alto", cabelo: { estilo: "chanel", preenchimento: "papel" }, roupa: { preenchimento: "tinta" }, calca: { preenchimento: "papel" }, rosto: "fofo", acessorio: "fone" },
+  { altura: "medio", cabelo: { estilo: "careca", preenchimento: "tinta" }, roupa: { preenchimento: "xadrez" }, calca: { preenchimento: "tinta" }, rosto: "desconfiado", acessorio: "bone" },
 ];

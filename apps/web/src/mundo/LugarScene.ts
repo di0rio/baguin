@@ -4,17 +4,21 @@ import {
   VELOCIDADE,
   mover,
   portaEm,
+  zonaEm,
   type AvatarEstado,
   type Direcao,
   type LugarDto,
+  type Movel,
   type Template,
 } from "@baguin/shared";
 import Phaser from "phaser";
 import { AvatarSprite } from "./AvatarSprite";
 import { DepuracaoColisao } from "./depuracaoColisao";
 import { indicadorDe, statusDe } from "./indicador";
-import { PROF_CHAO, desenharMapa, objetosDoMapa, portasDoMapa, zonasDoMapa, type Lado } from "./mapa";
-import { escalaTexto, pilulaClara, podarTexturasDeTexto, resolucaoTexto } from "./rotulos";
+import { FOLGA_ALCANCAVEL, contornoAlcancavel } from "./moveis";
+import { PROF_CHAO, contornoZonaAtiva, desenharMapa, objetosDoMapa, portasDoMapa, resolucaoMundo, zonasDoMapa, type Lado, type ObjetoMapa } from "./mapa";
+import { MUNDO, rgb } from "./paleta";
+import { adesivo, escalaTexto, podarTexturasDeTexto, resolucaoTexto } from "./rotulos";
 import type { Sala } from "./sala";
 import { Teclado } from "./teclado";
 import type { Voz } from "./voz";
@@ -24,12 +28,16 @@ const FADE_SAIDA_MS = 180;
 const FADE_ENTRADA_MS = 250;
 const SUAVIZACAO_OUTROS = 14; // maior = segue o servidor mais de perto
 const SNAP_PX = 200;
+const FADE = rgb(MUNDO.chao);
 
 type Outro = { sprite: AvatarSprite; av: AvatarEstado; x: number; y: number };
 type Eu = { x: number; y: number; dir: Direcao; movendo: boolean };
 
-/** Zoom inteiro conforme o tamanho da janela (pixels do mapa ficam nítidos). */
-const zoomPara = (l: number, a: number) => Math.max(1, Math.min(3, Math.floor(Math.min(l, a) / 300)));
+/** Zoom contínuo (não inteiro) conforme o tamanho da janela em px de CSS: o mapa é vetor e se redesenha na resolução certa. */
+const zoomPara = (l: number, a: number) => Math.max(1, Math.min(3, Math.min(l, a) / 300));
+
+/** Tamanho da tela que o Mundo repassa à cena: `dens` é a densidade de pixels (o canvas tem `dens` px por px de CSS). */
+export type Tela = { dens: number };
 
 /** Desenha o Lugar atual, os Avatares e move o próprio Avatar (predição local). */
 export class LugarScene extends Phaser.Scene {
@@ -40,6 +48,13 @@ export class LugarScene extends Phaser.Scene {
   private brilhos: Phaser.Tweens.Tween[] = [];
   private res = 2;
   private escala = 1;
+  /** Pixels do canvas do cenário por unidade do mundo (0 = ainda não desenhado). */
+  private resMundo = 0;
+  private objetos: ObjetoMapa[] = [];
+  private zonaAtiva: string | null = null;
+  private contornoZona: Phaser.GameObjects.Image | null = null;
+  private rotulosZona = new Map<string, { img: Phaser.GameObjects.Image; texto: string }>();
+  private halo: Phaser.GameObjects.Image | null = null;
   private avatares = new Map<string, Outro>();
   private eu: Eu | null = null;
   private euSprite: AvatarSprite | null = null;
@@ -56,13 +71,14 @@ export class LugarScene extends Phaser.Scene {
   constructor(
     private sala: Sala,
     private voz: Voz,
+    private tela: Tela = { dens: 1 },
   ) {
     super("lugar");
   }
 
   create() {
     this.teclado = new Teclado();
-    this.cameras.main.setBackgroundColor("#16121e").startFollow(this.cameraAlvo, true, 1, 1);
+    this.cameras.main.setBackgroundColor(MUNDO.fora).startFollow(this.cameraAlvo, false, 1, 1);
     this.ajustarZoom();
     this.scale.on("resize", this.ajustarZoom, this);
     if (import.meta.env.DEV) this.depuracao = new DepuracaoColisao(this);
@@ -73,7 +89,7 @@ export class LugarScene extends Phaser.Scene {
       s.on("saindo", () => {
         this.ativo = false;
         this.teclado.soltar();
-        this.cameras.main.fadeOut(FADE_SAIDA_MS, 22, 18, 30);
+        this.cameras.main.fadeOut(FADE_SAIDA_MS, ...FADE);
       }),
       s.on("avatarEntrou", (av) => this.adicionar(av)),
       s.on("avatarSaiu", (id) => this.remover(id)),
@@ -103,16 +119,32 @@ export class LugarScene extends Phaser.Scene {
   }
 
   private ajustarZoom() {
-    const zoom = zoomPara(this.scale.width, this.scale.height);
-    this.cameras.main.setZoom(zoom);
-    const res = resolucaoTexto(zoom);
+    const dens = this.tela.dens;
+    const zoom = zoomPara(this.scale.width / dens, this.scale.height / dens);
+    this.cameras.main.setZoom(zoom * dens);
+    const res = resolucaoTexto(zoom, dens);
     const escala = escalaTexto(zoom);
-    if (res === this.res && escala === this.escala) return;
+    const resMundo = resolucaoMundo(zoom, dens);
+    const mudouTexto = res !== this.res || escala !== this.escala;
+    const mudouMundo = resMundo !== this.resMundo;
+    if (!mudouTexto && !mudouMundo) return;
     this.res = res;
     this.escala = escala;
+    this.resMundo = resMundo;
     for (const o of this.avatares.values()) o.sprite.definirResolucao(res, escala);
-    if (this.template) this.montarRotulos(this.template);
+    if (this.template) {
+      if (mudouMundo) this.montarCenario(this.template);
+      else this.montarRotulos(this.template);
+    }
     podarTexturasDeTexto(this, res);
+    this.podarCenario();
+  }
+
+  /** Remove texturas do cenário feitas para outra resolução (depois que tudo foi refeito na nova). */
+  private podarCenario() {
+    for (const chave of this.textures.getTextureKeys()) {
+      if (/^(mapa|mov|zona|alc):/.test(chave) && !chave.endsWith(`:${this.resMundo}`)) this.textures.remove(chave);
+    }
   }
 
   // ---- montagem do Lugar ----
@@ -120,15 +152,31 @@ export class LugarScene extends Phaser.Scene {
   private montarLugar(lugar: LugarDto) {
     this.limparLugar();
     this.template = lugar.template;
-    const modelo = TEMPLATES_LUGAR[lugar.template];
-    const chave = `mapa:${lugar.template}`;
-    if (!this.textures.exists(chave)) this.textures.addCanvas(chave, desenharMapa(lugar.template));
+    this.zonaAtiva = null;
+    this.montarCenario(lugar.template);
+    this.depuracao?.montar(lugar.template);
+
+    this.cameras.main.fadeIn(FADE_ENTRADA_MS, ...FADE);
+    this.ativo = true;
+    this.portaEnviada = false;
+    this.msDesdeEnvio = 0;
+    this.enviouParado = true;
+  }
+
+  /** Chão, Móveis e rótulos do Lugar na resolução atual; refeito quando a resolução do cenário muda. */
+  private montarCenario(template: Template) {
+    this.limparCenario();
+    const modelo = TEMPLATES_LUGAR[template];
+    const res = this.resMundo;
+    const chave = `mapa:${template}:${res}`;
+    if (!this.textures.exists(chave)) this.textures.addCanvas(chave, desenharMapa(template, res));
     const larg = modelo.mapa[0].length * TILE;
     const alt = modelo.mapa.length * TILE;
-    this.decoracao.push(this.add.image(0, 0, chave).setOrigin(0).setDepth(PROF_CHAO));
-    for (const o of objetosDoMapa(lugar.template)) {
+    this.decoracao.push(this.add.image(0, 0, chave).setOrigin(0).setScale(1 / res).setDepth(PROF_CHAO));
+    this.objetos = objetosDoMapa(template, res);
+    for (const o of this.objetos) {
       if (!this.textures.exists(o.chave)) this.textures.addCanvas(o.chave, o.canvas);
-      const img = this.add.image(o.x, o.y, o.chave).setOrigin(0).setDepth(o.depth);
+      const img = this.add.image(o.x, o.y, o.chave).setOrigin(0).setScale(1 / o.res).setDepth(o.depth);
       this.decoracao.push(img);
       if (o.chave.includes(":luzinhas:") && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
         // as luzinhas piscam de leve
@@ -136,25 +184,34 @@ export class LugarScene extends Phaser.Scene {
       }
     }
     this.cameras.main.setBounds(0, 0, larg, alt);
-    this.montarRotulos(lugar.template);
-    this.depuracao?.montar(lugar.template);
+    this.montarRotulos(template);
+  }
 
-    this.cameras.main.fadeIn(FADE_ENTRADA_MS, 22, 18, 30);
-    this.ativo = true;
-    this.portaEnviada = false;
-    this.msDesdeEnvio = 0;
-    this.enviouParado = true;
+  private limparCenario() {
+    this.brilhos.forEach((t) => t.remove());
+    this.brilhos = [];
+    this.rotulos.forEach((o) => o.destroy());
+    this.rotulos = [];
+    this.rotulosZona.clear();
+    this.contornoZona?.destroy();
+    this.contornoZona = null;
+    this.halo?.destroy();
+    this.halo = null;
+    this.decoracao.forEach((o) => o.destroy());
+    this.decoracao = [];
+    this.objetos = [];
   }
 
   /** Rótulos de porta (na parede, ao lado dela) e de Zona (sobre o chão); refeitos quando a resolução do texto muda. */
   private montarRotulos(template: Template) {
     this.rotulos.forEach((o) => o.destroy());
     this.rotulos = [];
+    this.rotulosZona.clear();
     const modelo = TEMPLATES_LUGAR[template];
     const SETA: Record<Lado, string> = { baixo: "↑", cima: "↓", direita: "←", esquerda: "→" };
     const nomeDe = (destino: Template) => this.sala.nomeDoLugar(destino);
     for (const p of portasDoMapa(template, nomeDe)) {
-      const t = pilulaClara(this, `${SETA[p.lado]} ${p.texto}`, this.res, { forte: true });
+      const t = adesivo(this, `${SETA[p.lado]} ${p.texto}`, this.res, { forte: true });
       const x0 = p.col * TILE;
       const y0 = p.lin * TILE;
       const [x, y, ox] =
@@ -165,22 +222,56 @@ export class LugarScene extends Phaser.Scene {
       this.rotulos.push(this.add.image(x, y, t.chave).setOrigin(ox, 0.5).setDisplaySize(t.largura * this.escala, t.altura * this.escala).setDepth(PROF_CHAO + 5));
     }
     for (const z of zonasDoMapa(template)) {
-      const t = pilulaClara(this, z.nome, this.res);
+      const t = adesivo(this, z.nome, this.res, { ativa: z.letra === this.zonaAtiva });
       const cx = Math.round(((z.col0 + z.col1 + 1) * TILE) / 2);
       const centro = Math.floor((z.col0 + z.col1) / 2);
       const livreAcima = [centro, centro + 1].every((c) => modelo.mapa[z.lin0 - 1]?.[c] === ".");
       const y = livreAcima ? z.lin0 * TILE - 10 : z.lin0 * TILE + 11;
-      this.rotulos.push(this.add.image(cx, y, t.chave).setOrigin(0.5).setDisplaySize(t.largura * this.escala, t.altura * this.escala).setDepth(PROF_CHAO + 5));
+      const img = this.add.image(cx, y, t.chave).setOrigin(0.5).setDisplaySize(t.largura * this.escala, t.altura * this.escala).setDepth(PROF_CHAO + 5);
+      this.rotulos.push(img);
+      this.rotulosZona.set(z.letra, { img, texto: z.nome });
     }
+    this.contornarZona(template);
+  }
+
+  /** A Zona onde você está ganha o amarelo: contorno no chão e rótulo (o amarelo da regra do tema). */
+  private definirZonaAtiva(letra: string | null) {
+    if (letra === this.zonaAtiva || !this.template) return;
+    const antes = this.zonaAtiva;
+    this.zonaAtiva = letra;
+    for (const l of [antes, letra]) {
+      const r = l ? this.rotulosZona.get(l) : undefined;
+      if (r) r.img.setTexture(adesivo(this, r.texto, this.res, { ativa: l === letra }).chave);
+    }
+    this.contornarZona(this.template);
+  }
+
+  private contornarZona(template: Template) {
+    this.contornoZona?.destroy();
+    this.contornoZona = null;
+    if (!this.zonaAtiva) return;
+    const chave = `zona:${template}:${this.zonaAtiva}:${this.resMundo}`;
+    const c = contornoZonaAtiva(template, this.zonaAtiva, this.resMundo);
+    if (!this.textures.exists(chave)) this.textures.addCanvas(chave, c.canvas);
+    this.contornoZona = this.add.image(c.x, c.y, chave).setOrigin(0).setScale(1 / c.res).setDepth(PROF_CHAO + 1);
+  }
+
+  /**
+   * Gancho da Deixa (etapa 4): contorno amarelo no Móvel alcançável (`null` apaga). Nada chama isto ainda:
+   * a noção de Móvel alcançável nasce com a Deixa.
+   */
+  destacarMovel(movel: Movel | null) {
+    this.halo?.destroy();
+    this.halo = null;
+    const o = movel && this.objetos.find((x) => x.movel === movel);
+    if (!o) return;
+    const chave = `alc:${o.chave}`;
+    if (!this.textures.exists(chave)) this.textures.addCanvas(chave, contornoAlcancavel(o.canvas, o.res));
+    this.halo = this.add.image(o.x - FOLGA_ALCANCAVEL, o.y - FOLGA_ALCANCAVEL, chave).setOrigin(0).setScale(1 / o.res).setDepth(o.depth - 0.5);
   }
 
   private limparLugar() {
-    this.brilhos.forEach((t) => t.remove());
-    this.brilhos = [];
-    this.rotulos.forEach((o) => o.destroy());
-    this.rotulos = [];
-    this.decoracao.forEach((o) => o.destroy());
-    this.decoracao = [];
+    this.limparCenario();
     for (const o of this.avatares.values()) o.sprite.destruir();
     this.avatares.clear();
     this.euSprite = null;
@@ -247,6 +338,7 @@ export class LugarScene extends Phaser.Scene {
       const outros = [...this.avatares].filter(([id]) => id !== this.sala.contaId).map(([, o]) => o);
       this.depuracao.atualizar([...(this.eu ? [this.eu] : []), ...outros]);
     }
+    if (this.eu && this.template) this.definirZonaAtiva(zonaEm(this.template, this.eu.x, this.eu.y));
     if (this.eu) {
       this.cameraAlvo.x = Math.round(this.eu.x);
       this.cameraAlvo.y = Math.round(this.eu.y);

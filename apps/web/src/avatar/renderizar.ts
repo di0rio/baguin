@@ -1,980 +1,476 @@
-import { CATALOGO, type Direcao, type Pecas } from "@baguin/shared";
-
-/** Tamanho lógico de um quadro (px). O spritesheet é uma grade estrita, sem margem. */
-export const FRAME_L = 24;
-export const FRAME_A = 32;
-export const QUADROS_POR_DIRECAO = 3;
-/** Linhas do spritesheet, de cima para baixo. */
-export const ORDEM_DIRECOES: readonly Direcao[] = ["baixo", "esquerda", "direita", "cima"];
-/** Quadros de cada linha: 0 parado, 1 passo A, 2 passo B. */
-export const QUADRO_PARADO = 0;
-/** Índice do quadro no spritesheet (linha × 3 + coluna), para `textures.addSpriteSheet`. */
-export const quadro = (dir: Direcao, frame: number) => ORDEM_DIRECOES.indexOf(dir) * QUADROS_POR_DIRECAO + frame;
-
-// ---------------------------------------------------------------- paletas
-
-const PELE = ["#fde3cf", "#f3c9a0", "#dca173", "#b97b4f", "#8d5735", "#5e3a24"] as const;
-const CABELO = ["#2a2430", "#5b3a29", "#9a6b3c", "#e6bb5e", "#c4452d", "#cfd2de", "#4a86f0", "#f26fb2"] as const;
-const ROUPA = [
-  "#e8433f",
-  "#ff8a3d",
-  "#f2c94c",
-  "#4cc26b",
-  "#2fb7a6",
-  "#4a90e2",
-  "#7a5cf0",
-  "#e85aa6",
-  "#f4f1ea",
-  "#3d4252",
-] as const;
-const CALCA = ["#3b5a9d", "#2b2a3d", "#6a6c7c", "#7a5a3c", "#c9b78d", "#2f5d45", "#7b2d3b", "#e9e6df"] as const;
-
-// Garante que o catálogo do shared e as paletas continuam do mesmo tamanho.
-if (
-  PELE.length !== CATALOGO.pele ||
-  CABELO.length !== CATALOGO.cabeloCores ||
-  ROUPA.length !== CATALOGO.roupaCores ||
-  CALCA.length !== CATALOGO.calcaCores
-) {
-  throw new Error("Paletas do avatar fora de sincronia com CATALOGO");
-}
-
-export const PALETAS = { pele: PELE, cabelo: CABELO, roupa: ROUPA, calca: CALCA } as const;
-
-// ---------------------------------------------------------------- cores
-
-const rgb = (hex: string): [number, number, number] => [
-  parseInt(hex.slice(1, 3), 16),
-  parseInt(hex.slice(3, 5), 16),
-  parseInt(hex.slice(5, 7), 16),
-];
-const hex2 = (n: number) => Math.round(Math.max(0, Math.min(255, n))).toString(16).padStart(2, "0");
-const mix = (a: string, b: string, t: number) => {
-  const [r1, g1, b1] = rgb(a);
-  const [r2, g2, b2] = rgb(b);
-  return `#${hex2(r1 + (r2 - r1) * t)}${hex2(g1 + (g2 - g1) * t)}${hex2(b1 + (b2 - b1) * t)}`;
-};
-const sombra = (c: string) => mix(c, "#2a1445", 0.3);
-const luz = (c: string) => mix(c, "#fff4d6", 0.3);
-const escuro = (c: string) => mix(c, "#170d29", 0.6);
-
-type Tom = { c: string; s: string; l: string; d: string };
-const tom = (c: string): Tom => ({ c, s: sombra(c), l: luz(c), d: escuro(c) });
-
-/** Contorno ameixa-azulado (não preto): cada borda mistura a cor da peça com este tom. */
-const TINTA = "#352757";
-const OLHO = "#231a30";
-const IRIS = "#3f3160";
-const BRANCO = "#f6f3ec";
-const SOLA = "#bdb9cf";
-const PALHA = "#e0bb6a";
-
-// ---------------------------------------------------------------- grade de pixels
-
-type Grade = (string | null)[];
-const nova = (): Grade => new Array<string | null>(FRAME_L * FRAME_A).fill(null);
-
-/** Caneta que desenha deslocada (dx, dy) — usada para o balanço do corpo na caminhada. */
-type Caneta = { p(x: number, y: number, c: string): void; r(x0: number, y0: number, x1: number, y1: number, c: string): void; h(y: number, x0: number, x1: number, c: string): void };
-function caneta(g: Grade, dx = 0, dy = 0): Caneta {
-  const p = (x: number, y: number, c: string) => {
-    x += dx;
-    y += dy;
-    if (x >= 0 && x < FRAME_L && y >= 0 && y < FRAME_A) g[y * FRAME_L + x] = c;
-  };
-  const r = (x0: number, y0: number, x1: number, y1: number, c: string) => {
-    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) p(x, y, c);
-  };
-  return { p, r, h: (y, x0, x1, c) => r(x0, y, x1, y, c) };
-}
-
-const espelhar = (g: Grade): Grade => {
-  const o = nova();
-  for (let y = 0; y < FRAME_A; y++) for (let x = 0; x < FRAME_L; x++) o[y * FRAME_L + (FRAME_L - 1 - x)] = g[y * FRAME_L + x];
-  return o;
-};
-
-/** Contorno de 1px: cada pixel vazio vizinho de um pixel pintado ganha a cor dele bem escurecida. */
-function contornar(g: Grade) {
-  const out: (string | null)[] = [];
-  for (let y = 0; y < FRAME_A; y++) {
-    for (let x = 0; x < FRAME_L; x++) {
-      const i = y * FRAME_L + x;
-      if (g[i]) continue;
-      let viz: string | null = null;
-      let forca = 0;
-      // luz vem de cima à esquerda: bordas de cima/esquerda mais suaves, de baixo/direita mais firmes
-      for (const [ax, ay, f] of [[0, 1, 0.66], [-1, 0, 0.8], [1, 0, 0.66], [0, -1, 0.84]] as const) {
-        const nx = x + ax;
-        const ny = y + ay;
-        if (nx < 0 || ny < 0 || nx >= FRAME_L || ny >= FRAME_A) continue;
-        const v = g[ny * FRAME_L + nx];
-        if (v) {
-          viz = v;
-          forca = f;
-          break;
-        }
-      }
-      if (viz) out[i] = mix(viz, TINTA, forca);
-    }
-  }
-  out.forEach((c, i) => {
-    if (c) g[i] = c;
-  });
-}
-
-function sombraNoChao(g: Grade) {
-  const c = "#3a2f5b40";
-  const linhas: [number, number, number][] = [
-    [30, 5, 18],
-    [31, 7, 16],
-  ];
-  for (const [y, x0, x1] of linhas) for (let x = x0; x <= x1; x++) if (!g[y * FRAME_L + x]) g[y * FRAME_L + x] = c;
-}
-
-// ---------------------------------------------------------------- contexto de desenho
-
-type Paleta = { pele: Tom; cabelo: Tom; roupa: Tom; calca: Tom; boca: string; blush: string };
-type Ctx = {
-  pe: Paleta;
-  pecas: Pecas;
-  /** fase da caminhada: 0 parado, 1 passo A, -1 passo B */
-  fase: number;
-  /** corpo desce 1px nos passos */
-  oy: number;
-  /** cabeça coberta (boné/chapéu): estilos volumosos viram cabelo curto */
-  coberto: boolean;
-};
-
-const paleta = (p: Pecas): Paleta => {
-  const pele = tom(PELE[p.pele]);
-  return {
-    pele,
-    cabelo: tom(CABELO[p.cabelo.cor]),
-    roupa: tom(ROUPA[p.roupa.cor]),
-    calca: tom(CALCA[p.calca]),
-    boca: mix(pele.c, "#5a1f2e", 0.6),
-    blush: mix(pele.c, "#ff6f86", 0.38),
-  };
-};
-
-// ---------------------------------------------------------------- pernas e sapatos
-
-function pernasFrente(g: Grade, { pe, fase, oy }: Ctx) {
-  const f = caneta(g);
-  for (const lado of ["E", "D"] as const) {
-    const levantada = fase !== 0 && ((fase === 1 && lado === "D") || (fase === -1 && lado === "E"));
-    const x0 = lado === "E" ? 8 : 12;
-    const topo = 24 + oy;
-    const fundoCalca = levantada ? 26 : 27;
-    f.r(x0, topo, x0 + 3, fundoCalca, pe.calca.c);
-    // linha de sombra entre as pernas
-    const xi = lado === "E" ? x0 + 3 : x0;
-    f.r(xi, topo + 1, xi, fundoCalca, pe.calca.s);
-    const sy = fundoCalca + 1;
-    const sx0 = lado === "E" ? 7 : 12;
-    // tênis: cabedal branco com detalhe na cor da camisa e sola clara
-    f.r(sx0, sy, sx0 + 4, sy, BRANCO);
-    f.r(sx0, sy + 1, sx0 + 4, sy + 1, SOLA);
-    f.p(lado === "E" ? sx0 : sx0 + 4, sy, mix(BRANCO, SOLA, 0.5));
-    f.p(sx0 + 2, sy, pe.roupa.c);
-    f.p(lado === "E" ? sx0 + 1 : sx0 + 3, sy, mix(BRANCO, "#ffffff", 0.6));
-  }
-}
-
-function pernasLado(g: Grade, { pe, fase, oy }: Ctx) {
-  const f = caneta(g);
-  // perna de perto (clara) e de longe (sombra); passo: uma vai à frente (esquerda), outra atrás
-  const perna = (dx: number, levantada: boolean, longe: boolean) => {
-    const cor = longe ? pe.calca.s : pe.calca.c;
-    const x0 = 10 + dx;
-    const topo = 24 + oy;
-    const fundo = levantada ? 26 : 27;
-    f.r(x0, topo, x0 + 2, fundo, cor);
-    const sy = fundo + 1;
-    const solaC = longe ? mix(SOLA, "#2a1445", 0.2) : SOLA;
-    const topoC = longe ? mix(BRANCO, "#2a1445", 0.2) : BRANCO;
-    f.r(x0 - 2, sy, x0 + 2, sy, topoC);
-    f.r(x0 - 2, sy + 1, x0 + 2, sy + 1, solaC);
-    f.p(x0 + 1, sy, longe ? mix(pe.roupa.s, "#2a1445", 0.2) : pe.roupa.c); // detalhe na cor da camisa
-    f.p(x0 - 2, sy, longe ? topoC : mix(BRANCO, SOLA, 0.45)); // biqueira
-  };
-  if (fase === 0) {
-    perna(1, false, true);
-    perna(0, false, false);
-  } else {
-    // longe primeiro (fica atrás)
-    perna(fase === 1 ? 2 : -2, fase === 1, true); // nota: a perna que vai atrás levanta o pé
-    perna(fase === 1 ? -2 : 2, fase === -1, false);
-  }
-}
-
-// ---------------------------------------------------------------- cabeça
-
-function cabecaFrente(t: Caneta, { pe }: Ctx) {
-  const s = pe.pele;
-  t.h(3, 8, 15, s.c);
-  t.h(4, 7, 16, s.c);
-  t.r(6, 5, 17, 14, s.c);
-  t.h(15, 7, 16, s.c);
-  // orelhas
-  t.r(5, 10, 5, 12, s.c);
-  t.r(18, 10, 18, 12, s.c);
-  t.p(5, 11, s.s);
-  t.p(18, 11, s.s);
-  // sombra do queixo
-  t.h(15, 8, 15, s.s);
-}
-
-function rostoFrente(t: Caneta, { pe }: Ctx) {
-  for (const x of [8, 14]) {
-    t.r(x, 10, x + 1, 12, OLHO);
-    t.r(x, 12, x + 1, 12, IRIS);
-    t.p(x, 10, "#f8f5ff"); // brilho
-  }
-  t.p(7, 13, pe.blush);
-  t.p(16, 13, pe.blush);
-  t.h(13, 11, 12, pe.boca);
-}
-
-function cabecaLado(t: Caneta, { pe }: Ctx) {
-  const s = pe.pele;
-  t.h(3, 8, 15, s.c);
-  t.h(4, 7, 16, s.c);
-  t.r(6, 5, 17, 14, s.c);
-  t.h(15, 7, 16, s.c);
-  // nariz
-  t.r(5, 11, 5, 12, s.c);
-  t.p(5, 12, s.s);
-  // orelha
-  t.r(12, 10, 13, 11, s.s);
-  t.p(13, 10, escuro(s.c));
-  t.h(15, 8, 15, s.s);
-}
-
-function rostoLado(t: Caneta, { pe }: Ctx) {
-  t.r(7, 10, 8, 12, OLHO);
-  t.r(7, 12, 8, 12, IRIS);
-  t.p(7, 10, "#f8f5ff");
-  t.p(7, 13, pe.blush);
-  t.r(6, 14, 6, 14, pe.boca);
-}
-
-function cabecaCosta(t: Caneta, { pe }: Ctx) {
-  const s = pe.pele;
-  t.h(3, 8, 15, s.c);
-  t.h(4, 7, 16, s.c);
-  t.r(6, 5, 17, 14, s.c);
-  t.h(15, 8, 15, s.c);
-  t.r(5, 10, 5, 12, s.c);
-  t.r(18, 10, 18, 12, s.c);
-  t.p(5, 11, s.s);
-  t.p(18, 11, s.s);
-  t.h(15, 8, 15, s.s);
-}
-
-// ---------------------------------------------------------------- cabelo
-
-/** Cúpula comum (topo + laterais) usada por curto/longo/rabo. `f` = frente. */
-function cupulaFrente(t: Caneta, h: Tom) {
-  t.h(2, 8, 15, h.c);
-  t.h(3, 6, 17, h.c);
-  t.r(5, 4, 18, 6, h.c);
-  t.h(7, 5, 7, h.c);
-  t.h(7, 10, 12, h.c);
-  t.h(7, 16, 18, h.c);
-  t.r(5, 8, 6, 9, h.c);
-  t.r(17, 8, 18, 9, h.c);
-  // luz e sombra
-  t.h(3, 8, 11, h.l);
-  t.h(4, 7, 8, h.l);
-  t.h(3, 9, 10, mix(h.l, "#ffffff", 0.55));
-  t.r(18, 4, 18, 9, h.s);
-  t.h(6, 13, 17, h.s);
-  t.p(11, 7, h.s);
-}
-
-function cabeloFrente(t: Caneta, ctx: Ctx, camada: "atras" | "frente") {
-  const { pe, pecas } = ctx;
-  const h = pe.cabelo;
-  let estilo = pecas.cabelo.estilo;
-  if (ctx.coberto && (estilo === "moicano" || estilo === "blackpower")) estilo = "curto";
-  if (camada === "atras") return;
-  switch (estilo) {
-    case "careca":
-      t.h(4, 10, 12, pe.pele.l);
-      break;
-    case "curto":
-      cupulaFrente(t, h);
-      break;
-    case "moicano": {
-      // laterais raspadas
-      const raspado = mix(pe.pele.c, h.c, 0.4);
-      t.h(3, 6, 8, raspado);
-      t.h(3, 15, 17, raspado);
-      t.h(4, 6, 7, raspado);
-      t.h(4, 16, 17, raspado);
-      t.h(5, 6, 6, raspado);
-      t.h(5, 17, 17, raspado);
-      t.h(1, 11, 12, h.c);
-      t.h(2, 10, 13, h.c);
-      t.r(9, 3, 14, 5, h.c);
-      t.h(6, 10, 13, h.c);
-      t.h(7, 11, 12, h.c);
-      t.r(10, 1, 10, 4, h.l);
-      t.r(14, 3, 14, 5, h.s);
-      t.h(6, 13, 13, h.s);
-      break;
-    }
-    case "longo": {
-      cupulaFrente(t, h);
-      t.h(7, 5, 6, h.c);
-      // cortinas sobre os ombros
-      t.r(5, 10, 7, 20, h.c);
-      t.r(16, 10, 18, 20, h.c);
-      t.r(5, 8, 5, 20, h.c);
-      t.r(18, 8, 18, 20, h.s);
-      t.r(7, 10, 7, 19, h.s);
-      t.r(16, 10, 16, 19, h.l);
-      t.h(21, 6, 7, h.s);
-      t.h(21, 16, 17, h.s);
-      t.p(5, 20, h.s);
-      break;
-    }
-    case "rabo": {
-      cupulaFrente(t, h);
-      // rabo aparece de lado, preso alto
-      t.r(19, 4, 20, 5, h.c);
-      t.r(19, 6, 21, 11, h.c);
-      t.r(20, 12, 21, 14, h.c);
-      t.h(15, 20, 20, h.s);
-      t.r(21, 6, 21, 13, h.s);
-      t.r(19, 5, 20, 5, ROUPA[pecas.roupa.cor]);
-      break;
-    }
-    case "blackpower": {
-      // volume redondo
-      t.h(0 + 1, 8, 15, h.c);
-      t.h(2, 6, 17, h.c);
-      t.h(3, 4, 19, h.c);
-      t.r(3, 4, 20, 8, h.c);
-      t.r(3, 9, 5, 12, h.c);
-      t.r(18, 9, 20, 12, h.c);
-      t.h(9, 6, 8, h.c);
-      t.h(9, 15, 17, h.c);
-      t.h(8, 9, 14, h.c);
-      t.h(7, 9, 14, h.c);
-      // testa aparece abaixo da linha do cabelo
-      t.h(9, 9, 14, pe.pele.c);
-      t.h(8, 9, 14, h.c);
-      t.h(3, 9, 12, h.l);
-      t.h(4, 6, 8, h.l);
-      t.r(20, 4, 20, 12, h.s);
-      t.h(8, 15, 19, h.s);
-      // cachos
-      for (const [x, y] of [[6, 4], [10, 5], [14, 4], [17, 6], [5, 8], [12, 7], [8, 7], [19, 9], [4, 11]] as const) t.p(x, y, mix(h.c, h.s, 0.7));
-      for (const [x, y] of [[8, 5], [13, 6], [16, 4], [5, 6], [19, 7]] as const) t.p(x, y, mix(h.c, h.l, 0.6));
-      break;
-    }
-  }
-}
-
-function cupulaLado(t: Caneta, h: Tom) {
-  t.h(2, 8, 15, h.c);
-  t.h(3, 6, 17, h.c);
-  t.r(6, 4, 18, 5, h.c);
-  t.h(6, 6, 9, h.c);
-  t.r(10, 6, 18, 9, h.c);
-  t.h(7, 6, 7, h.c);
-  t.r(14, 10, 18, 12, h.c);
-  t.h(13, 15, 17, h.c);
-  t.h(3, 8, 11, h.l);
-  t.h(4, 7, 9, h.l);
-  t.h(3, 9, 10, mix(h.l, "#ffffff", 0.55));
-  t.r(18, 4, 18, 12, h.s);
-  t.h(13, 15, 17, h.s);
-  t.h(9, 14, 17, h.s);
-}
-
-function cabeloLado(t: Caneta, ctx: Ctx, camada: "atras" | "frente") {
-  const { pe, pecas } = ctx;
-  const h = pe.cabelo;
-  let estilo = pecas.cabelo.estilo;
-  if (ctx.coberto && (estilo === "moicano" || estilo === "blackpower")) estilo = "curto";
-  if (camada === "atras") {
-    if (estilo === "longo") {
-      // cai atrás das costas
-      t.r(13, 13, 18, 21, h.c);
-      t.r(18, 13, 18, 21, h.s);
-      t.h(22, 14, 17, h.s);
-      t.h(21, 13, 13, h.s);
-    }
-    return;
-  }
-  switch (estilo) {
-    case "careca":
-      break;
-    case "curto":
-      cupulaLado(t, h);
-      break;
-    case "moicano": {
-      const raspado = mix(pe.pele.c, h.c, 0.4);
-      t.h(4, 11, 15, raspado);
-      t.r(10, 5, 16, 6, raspado);
-      t.r(14, 7, 17, 11, raspado);
-      t.h(1, 10, 13, h.c);
-      t.h(2, 9, 15, h.c);
-      t.r(8, 3, 16, 4, h.c);
-      t.r(9, 5, 17, 5, h.c);
-      t.h(6, 9, 11, h.c);
-      t.r(15, 6, 18, 9, h.c);
-      t.r(17, 10, 18, 12, h.c);
-      t.h(2, 10, 12, h.l);
-      t.r(18, 5, 18, 12, h.s);
-      t.h(5, 13, 16, h.s);
-      break;
-    }
-    case "longo":
-      cupulaLado(t, h);
-      t.r(14, 10, 18, 14, h.c);
-      t.h(15, 15, 17, h.c);
-      t.r(18, 10, 18, 14, h.s);
-      break;
-    case "rabo":
-      cupulaLado(t, h);
-      t.r(19, 4, 20, 5, ROUPA[pecas.roupa.cor]);
-      t.r(19, 6, 22, 11, h.c);
-      t.r(19, 12, 21, 15, h.c);
-      t.r(20, 16, 20, 16, h.c);
-      t.r(22, 6, 22, 11, h.s);
-      t.r(21, 12, 21, 15, h.s);
-      t.h(7, 19, 20, h.l);
-      break;
-    case "blackpower": {
-      t.h(1, 8, 15, h.c);
-      t.h(2, 6, 17, h.c);
-      t.r(4, 3, 20, 8, h.c);
-      t.r(11, 9, 20, 12, h.c);
-      t.r(5, 8, 7, 8, h.c);
-      t.h(13, 14, 19, h.c);
-      t.h(4, 6, 12, h.l);
-      t.h(3, 8, 11, h.l);
-      t.r(20, 4, 20, 13, h.s);
-      t.h(13, 15, 19, h.s);
-      t.h(9, 10, 19, h.s);
-      for (const [x, y] of [[6, 4], [10, 5], [14, 4], [17, 6], [15, 9], [12, 7], [8, 7], [19, 9], [16, 11]] as const) t.p(x, y, mix(h.c, h.s, 0.7));
-      for (const [x, y] of [[8, 5], [13, 6], [16, 4], [11, 3]] as const) t.p(x, y, mix(h.c, h.l, 0.6));
-      break;
-    }
-  }
-}
-
-function cabeloCosta(t: Caneta, ctx: Ctx, camada: "atras" | "frente") {
-  const { pe, pecas } = ctx;
-  const h = pe.cabelo;
-  let estilo = pecas.cabelo.estilo;
-  if (ctx.coberto && (estilo === "moicano" || estilo === "blackpower")) estilo = "curto";
-  if (camada === "atras") return;
-  const cupula = (fundo: number) => {
-    t.h(2, 8, 15, h.c);
-    t.h(3, 6, 17, h.c);
-    t.r(5, 4, 18, fundo - 1, h.c);
-    t.h(fundo, 7, 16, h.c);
-    t.h(3, 8, 11, h.l);
-    t.h(4, 7, 9, h.l);
-    t.h(3, 9, 10, mix(h.l, "#ffffff", 0.55));
-    t.r(18, 4, 18, fundo - 1, h.s);
-    t.h(fundo, 7, 16, h.s);
-    t.h(fundo - 1, 6, 17, h.c);
-  };
-  switch (estilo) {
-    case "careca":
-      break;
-    case "curto":
-      cupula(14);
-      t.h(14, 8, 15, h.s);
-      break;
-    case "moicano": {
-      const raspado = mix(pe.pele.c, h.c, 0.4);
-      t.r(6, 4, 7, 12, raspado);
-      t.r(16, 4, 17, 12, raspado);
-      t.h(5, 6, 17, raspado);
-      t.h(13, 8, 15, raspado);
-      t.h(1, 11, 12, h.c);
-      t.h(2, 10, 13, h.c);
-      t.r(9, 3, 14, 13, h.c);
-      t.r(10, 1, 10, 6, h.l);
-      t.r(14, 3, 14, 13, h.s);
-      t.h(14, 10, 13, h.s);
-      break;
-    }
-    case "longo":
-      cupula(14);
-      t.r(6, 14, 17, 20, h.c);
-      t.r(7, 21, 16, 21, h.c);
-      t.r(6, 14, 7, 20, h.s);
-      t.r(16, 14, 17, 20, h.s);
-      t.h(22, 8, 9, h.s);
-      t.h(22, 14, 15, h.s);
-      t.h(21, 7, 16, h.s);
-      t.r(11, 14, 12, 19, h.l);
-      break;
-    case "rabo": {
-      cupula(13);
-      t.h(14, 8, 15, h.s);
-      // presilha + rabo pendurado
-      t.r(10, 3, 13, 4, ROUPA[pecas.roupa.cor]);
-      t.r(10, 5, 13, 15, h.c);
-      t.r(10, 16, 13, 17, h.c);
-      t.r(11, 18, 12, 19, h.c);
-      t.r(10, 5, 10, 15, h.l);
-      t.r(13, 5, 13, 17, h.s);
-      t.r(12, 18, 12, 19, h.s);
-      break;
-    }
-    case "blackpower": {
-      t.h(1, 8, 15, h.c);
-      t.h(2, 6, 17, h.c);
-      t.r(3, 3, 20, 12, h.c);
-      t.r(4, 13, 19, 13, h.c);
-      t.h(14, 7, 16, h.c);
-      t.h(3, 8, 11, h.l);
-      t.h(4, 6, 8, h.l);
-      t.r(20, 4, 20, 12, h.s);
-      t.h(14, 7, 16, h.s);
-      t.h(13, 4, 19, h.s);
-      for (const [x, y] of [[6, 4], [10, 5], [14, 4], [17, 6], [5, 8], [12, 8], [8, 7], [19, 9], [4, 11], [10, 11], [15, 11]] as const) t.p(x, y, mix(h.c, h.s, 0.7));
-      for (const [x, y] of [[8, 5], [13, 6], [16, 4], [5, 6], [19, 7], [8, 10], [13, 10]] as const) t.p(x, y, mix(h.c, h.l, 0.6));
-      break;
-    }
-  }
-}
-
-// ---------------------------------------------------------------- roupa e braços
-
-type Braco = { dy: number };
-
-function bracosFrente(g: Grade, ctx: Ctx, { oy }: { oy: number }) {
-  const { pe, pecas, fase } = ctx;
-  const estilo = pecas.roupa.estilo;
-  const r = pe.roupa;
-  const pele = pe.pele;
-  const pares: [number, number, Braco][] = [
-    [6, -1, { dy: fase === 1 ? -1 : fase === -1 ? 1 : 0 }],
-    [16, 1, { dy: fase === 1 ? 1 : fase === -1 ? -1 : 0 }],
-  ];
-  for (const [x0, lado, b] of pares) {
-    const t = caneta(g, 0, oy + b.dy);
-    const xs = lado === -1 ? [x0, x0 + 1] : [x0, x0 + 1];
-    void xs;
-    if (estilo === "regata") {
-      t.r(x0, 17, x0 + 1, 22, pele.c);
-      t.r(lado === -1 ? x0 : x0 + 1, 17, lado === -1 ? x0 : x0 + 1, 22, pele.s);
-      t.p(lado === -1 ? x0 : x0 + 1, 17, pele.c);
-    } else if (estilo === "moletom") {
-      t.r(x0, 17, x0 + 1, 21, r.c);
-      t.r(lado === -1 ? x0 : x0 + 1, 17, lado === -1 ? x0 : x0 + 1, 21, r.s);
-      t.r(x0, 21, x0 + 1, 22, r.s);
-      t.r(x0, 23, x0 + 1, 23, pele.c);
-    } else {
-      t.r(x0, 17, x0 + 1, 19, r.c);
-      t.r(x0, 19, x0 + 1, 19, r.s);
-      t.r(lado === -1 ? x0 : x0 + 1, 17, lado === -1 ? x0 : x0 + 1, 18, r.s);
-      t.r(x0, 20, x0 + 1, 22, pele.c);
-      t.r(lado === -1 ? x0 : x0 + 1, 20, lado === -1 ? x0 : x0 + 1, 22, pele.s);
-    }
-  }
-}
-
-function torsoFrente(t: Caneta, { pe, pecas }: Ctx) {
-  const r = pe.roupa;
-  const pele = pe.pele;
-  const estilo = pecas.roupa.estilo;
-  t.r(8, 16, 15, 23, r.c);
-  t.r(15, 17, 15, 23, r.s);
-  t.h(23, 8, 15, r.s);
-  t.r(9, 18, 10, 19, r.l);
-  if (estilo === "camiseta") {
-    t.h(16, 10, 13, pele.s);
-    t.h(17, 11, 12, pele.c);
-    t.h(16, 9, 9, r.l);
-    t.h(16, 14, 14, r.l);
-    // dobras do tecido na barriga
-    t.p(12, 20, r.s);
-    t.p(11, 21, r.s);
-    t.p(13, 22, r.s);
-    t.p(9, 21, r.l);
-  } else if (estilo === "moletom") {
-    // capuz: borda grossa em U em volta do pescoço
-    const capuz = mix(r.c, "#ffffff", 0.12);
-    t.h(16, 8, 15, capuz);
-    t.r(8, 17, 9, 17, capuz);
-    t.r(14, 17, 15, 17, capuz);
-    t.h(16, 10, 13, pele.s);
-    t.h(17, 10, 13, r.s);
-    t.h(17, 11, 12, pele.s);
-    // cordinhas
-    t.r(10, 18, 10, 20, BRANCO);
-    t.r(13, 18, 13, 20, BRANCO);
-    t.p(10, 21, SOLA);
-    t.p(13, 21, SOLA);
-    // bolso canguru
-    t.r(9, 21, 14, 22, r.s);
-    t.h(21, 9, 14, mix(r.s, "#000000", 0.15));
-  } else {
-    // regata: alças + decote
-    t.r(8, 16, 15, 16, pele.c);
-    t.r(9, 16, 10, 16, r.c);
-    t.r(13, 16, 14, 16, r.c);
-    t.r(11, 17, 12, 18, pele.c);
-    t.h(17, 8, 8, pele.c);
-    t.h(17, 15, 15, pele.c);
-    t.h(18, 11, 12, pele.c);
-    t.h(19, 11, 12, r.c);
-    t.h(19, 12, 12, r.c);
-    t.p(11, 18, pele.s);
-    t.p(12, 18, pele.s);
-  }
-}
-
-function torsoCosta(t: Caneta, { pe, pecas }: Ctx) {
-  const r = pe.roupa;
-  const pele = pe.pele;
-  const estilo = pecas.roupa.estilo;
-  t.r(8, 16, 15, 23, r.c);
-  t.r(15, 17, 15, 23, r.s);
-  t.h(23, 8, 15, r.s);
-  t.r(9, 19, 10, 20, r.l);
-  if (estilo === "moletom") {
-    const capuz = mix(r.c, "#ffffff", 0.12);
-    t.r(9, 16, 14, 19, capuz);
-    t.h(20, 10, 13, capuz);
-    t.h(20, 9, 9, r.s);
-    t.h(20, 14, 14, r.s);
-    t.r(9, 19, 14, 19, r.s);
-    t.h(16, 9, 14, mix(capuz, "#ffffff", 0.1));
-  } else if (estilo === "camiseta") {
-    t.h(16, 10, 13, r.s);
-  } else {
-    t.r(8, 16, 15, 16, pele.c);
-    t.r(9, 16, 10, 17, r.c);
-    t.r(13, 16, 14, 17, r.c);
-    t.r(8, 17, 8, 17, pele.c);
-    t.r(15, 17, 15, 17, pele.c);
-    t.r(11, 17, 12, 17, pele.c);
-    t.r(11, 18, 12, 18, pele.s);
-    t.r(8, 18, 10, 18, r.c);
-    t.r(13, 18, 15, 18, r.c);
-  }
-}
-
-function bracosCosta(g: Grade, ctx: Ctx, oy: { oy: number }) {
-  bracosFrente(g, ctx, oy);
-}
-
-function bracoLado(g: Grade, ctx: Ctx, longe: boolean) {
-  const { pe, pecas, fase, oy } = ctx;
-  const estilo = pecas.roupa.estilo;
-  const r = pe.roupa;
-  const pele = pe.pele;
-  // desloca a parte de baixo do braço para frente/trás; longe faz o oposto
-  const sinal = (fase === 1 ? 1 : fase === -1 ? -1 : 0) * (longe ? 1 : -1);
-  const t = caneta(g, 0, oy);
-  const cM = longe ? r.s : r.c;
-  const cS = longe ? mix(r.s, "#000000", 0.15) : r.s;
-  const cP = longe ? pele.s : pele.c;
-  // linhas do braço: y, deslocamento x
-  const off = (y: number) => (y <= 18 ? 0 : y <= 20 ? sinal : sinal * 2);
-  const desenha = (y: number, cor: string) => {
-    t.r(11 + off(y), y, 12 + off(y), y, cor);
-    if (!longe) t.p(12 + off(y), y, mix(cor, "#2a1445", 0.16)); // borda de trás do braço
-  };
-  if (estilo === "regata") {
-    for (let y = 17; y <= 22; y++) desenha(y, cP);
-  } else if (estilo === "moletom") {
-    for (let y = 17; y <= 20; y++) desenha(y, cM);
-    desenha(21, cS);
-    desenha(22, cS);
-    t.r(11 + off(23), 23, 12 + off(23), 23, cP);
-  } else {
-    for (let y = 17; y <= 18; y++) desenha(y, cM);
-    desenha(19, cS);
-    for (let y = 20; y <= 22; y++) desenha(y, cP);
-  }
-}
-
-function torsoLado(t: Caneta, { pe, pecas }: Ctx) {
-  const r = pe.roupa;
-  const pele = pe.pele;
-  const estilo = pecas.roupa.estilo;
-  t.r(9, 16, 14, 23, r.c);
-  t.r(14, 17, 14, 23, r.s);
-  t.h(23, 9, 14, r.s);
-  if (estilo === "camiseta") {
-    t.h(16, 9, 10, pele.s);
-    t.h(16, 11, 11, r.l);
-  } else if (estilo === "moletom") {
-    const capuz = mix(r.c, "#ffffff", 0.12);
-    t.r(12, 16, 14, 18, capuz);
-    t.r(9, 16, 11, 16, capuz);
-    t.h(16, 9, 10, pele.s);
-    t.r(10, 21, 13, 22, r.s);
-    t.r(9, 18, 9, 19, BRANCO);
-  } else {
-    t.r(9, 16, 9, 18, pele.c);
-    t.r(10, 16, 10, 17, pele.c);
-    t.r(11, 16, 11, 17, r.c);
-    t.r(12, 16, 12, 16, r.c);
-    t.p(9, 18, pele.s);
-    t.p(10, 18, r.c);
-  }
-}
-
-// ---------------------------------------------------------------- acessórios
-
-const ARO = "#e2b04a";
-
-function acessorioFrente(t: Caneta, { pecas, pe }: Ctx) {
-  const roupa = pe.roupa;
-  switch (pecas.acessorio) {
-    case "oculos":
-      for (const x of [7, 13]) {
-        t.r(x, 9, x + 3, 9, ARO);
-        t.r(x, 13, x + 3, 13, ARO);
-        t.r(x, 10, x, 12, ARO);
-        t.r(x + 3, 10, x + 3, 12, ARO);
-      }
-      t.h(10, 11, 12, ARO);
-      t.p(6, 10, ARO);
-      t.p(17, 10, ARO);
-      // brilho da lente
-      break;
-    case "bone": {
-      const c = roupa.c;
-      t.h(1, 8, 15, c);
-      t.r(6, 2, 17, 4, c);
-      t.r(5, 5, 18, 6, c);
-      t.r(6, 4, 17, 4, c);
-      t.h(2, 8, 11, roupa.l);
-      t.h(3, 7, 9, roupa.l);
-      t.r(17, 2, 17, 4, roupa.s);
-      t.h(6, 5, 18, roupa.s);
-      // aba
-      t.h(7, 6, 17, roupa.d);
-      t.h(8, 8, 15, roupa.d);
-      t.p(11, 1, roupa.l);
-      t.p(12, 1, roupa.l);
-      t.h(5, 11, 12, roupa.l);
-      break;
-    }
-    case "fone": {
-      const b = "#5c5a82";
-      t.h(1, 9, 14, b);
-      t.h(2, 7, 8, b);
-      t.h(2, 15, 16, b);
-      t.h(3, 6, 6, b);
-      t.h(3, 17, 17, b);
-      t.r(5, 4, 5, 9, b);
-      t.r(18, 4, 18, 9, b);
-      t.r(4, 9, 6, 13, "#706d9c");
-      t.r(17, 9, 19, 13, "#706d9c");
-      t.r(4, 10, 4, 12, "#ff6f8e");
-      t.r(19, 10, 19, 12, "#ff6f8e");
-      t.h(9, 4, 6, "#918dc0");
-      t.h(9, 17, 19, "#918dc0");
-      t.h(13, 4, 6, "#45426b");
-      t.h(13, 17, 19, "#45426b");
-      t.h(1, 9, 11, "#8c88b8");
-      break;
-    }
-    case "chapeu": {
-      t.h(0 + 1, 9, 14, PALHA);
-      t.r(7, 2, 16, 3, PALHA);
-      t.r(7, 4, 16, 5, roupa.c);
-      t.h(5, 7, 16, roupa.s);
-      t.h(2, 9, 12, luz(PALHA));
-      // aba larga
-      t.h(6, 4, 19, PALHA);
-      t.h(7, 2, 21, PALHA);
-      t.h(8, 3, 20, sombra(PALHA));
-      t.h(9, 5, 18, mix(PALHA, "#2a1445", 0.5));
-      t.h(6, 5, 9, luz(PALHA));
-      t.h(7, 3, 7, luz(PALHA));
-      t.p(2, 7, sombra(PALHA));
-      t.p(21, 7, sombra(PALHA));
-      break;
-    }
-    case "nenhum":
-      break;
-  }
-}
-
-function acessorioLado(t: Caneta, { pecas, pe }: Ctx) {
-  const roupa = pe.roupa;
-  switch (pecas.acessorio) {
-    case "oculos":
-      t.r(6, 9, 9, 9, ARO);
-      t.r(6, 13, 9, 13, ARO);
-      t.r(6, 10, 6, 12, ARO);
-      t.r(9, 10, 9, 12, ARO);
-      t.h(10, 10, 12, ARO);
-      break;
-    case "bone": {
-      const c = roupa.c;
-      t.h(1, 9, 15, c);
-      t.r(7, 2, 17, 4, c);
-      t.r(6, 5, 18, 6, c);
-      t.h(2, 9, 12, roupa.l);
-      t.h(3, 8, 10, roupa.l);
-      t.r(18, 4, 18, 6, roupa.s);
-      t.h(6, 6, 18, roupa.s);
-      // aba para a frente (esquerda)
-      t.r(2, 6, 7, 7, roupa.d);
-      t.h(6, 2, 7, roupa.s);
-      t.h(7, 3, 6, roupa.d);
-      t.p(12, 1, roupa.l);
-      t.p(15, 5, roupa.s);
-      break;
-    }
-    case "fone": {
-      const b = "#5c5a82";
-      t.h(1, 8, 13, b);
-      t.r(12, 2, 13, 8, b);
-      t.h(2, 10, 11, b);
-      t.h(3, 11, 11, b);
-      t.r(10, 8, 15, 13, "#706d9c");
-      t.r(10, 8, 15, 8, "#918dc0");
-      t.r(10, 13, 15, 13, "#45426b");
-      t.r(12, 10, 13, 11, "#ff6f8e");
-      break;
-    }
-    case "chapeu": {
-      t.h(1, 9, 14, PALHA);
-      t.r(7, 2, 16, 3, PALHA);
-      t.r(7, 4, 16, 5, roupa.c);
-      t.h(5, 7, 16, roupa.s);
-      t.h(2, 9, 12, luz(PALHA));
-      t.h(6, 4, 19, PALHA);
-      t.h(7, 2, 21, PALHA);
-      t.h(8, 3, 20, sombra(PALHA));
-      t.h(9, 5, 18, mix(PALHA, "#2a1445", 0.5));
-      t.h(6, 5, 9, luz(PALHA));
-      t.h(7, 3, 7, luz(PALHA));
-      break;
-    }
-    case "nenhum":
-      break;
-  }
-}
-
-function acessorioCosta(t: Caneta, ctx: Ctx) {
-  const { pecas, pe } = ctx;
-  const roupa = pe.roupa;
-  if (pecas.acessorio === "bone") {
-    const c = roupa.c;
-    t.h(1, 8, 15, c);
-    t.r(6, 2, 17, 5, c);
-    t.r(5, 5, 18, 8, c);
-    t.h(2, 8, 11, roupa.l);
-    t.h(3, 7, 9, roupa.l);
-    t.r(17, 2, 17, 5, roupa.s);
-    t.h(8, 5, 18, roupa.s);
-    t.h(7, 10, 13, roupa.d);
-    t.r(11, 1, 12, 2, roupa.l);
-    t.r(11, 4, 12, 4, roupa.s);
-  } else if (pecas.acessorio === "fone") {
-    acessorioFrente(t, ctx);
-  } else if (pecas.acessorio === "chapeu") {
-    acessorioFrente(t, ctx);
-  }
-}
-
-// ---------------------------------------------------------------- composição
-
-function quadroFrente(g: Grade, ctx: Ctx) {
-  const t = caneta(g, 0, ctx.oy);
-  pernasFrente(g, ctx);
-  torsoFrente(t, ctx);
-  bracosFrente(g, ctx, ctx);
-  cabecaFrente(t, ctx);
-  rostoFrente(t, ctx);
-  cabeloFrente(t, ctx, "frente");
-  acessorioFrente(t, ctx);
-}
-
-function quadroLado(g: Grade, ctx: Ctx) {
-  const t = caneta(g, 0, ctx.oy);
-  cabeloLado(t, ctx, "atras");
-  bracoLado(g, ctx, true);
-  pernasLado(g, ctx);
-  torsoLado(t, ctx);
-  bracoLado(g, ctx, false);
-  cabecaLado(t, ctx);
-  rostoLado(t, ctx);
-  cabeloLado(t, ctx, "frente");
-  acessorioLado(t, ctx);
-}
-
-function quadroCosta(g: Grade, ctx: Ctx) {
-  const t = caneta(g, 0, ctx.oy);
-  pernasFrente(g, ctx);
-  torsoCosta(t, ctx);
-  bracosCosta(g, ctx, ctx);
-  cabecaCosta(t, ctx);
-  cabeloCosta(t, ctx, "frente");
-  acessorioCosta(t, ctx);
-}
-
-const FASES = [0, 1, -1] as const;
-
-/** Desenha um quadro como grade de cores (null = transparente). Puro, sem DOM. */
-export function desenharQuadro(pecas: Pecas, dir: Direcao, frame: number, comContorno = true): (string | null)[] {
-  const fase = FASES[frame] ?? 0;
-  const ctx: Ctx = {
-    pe: paleta(pecas),
-    pecas,
-    fase,
-    oy: fase === 0 ? 0 : 1,
-    coberto: pecas.acessorio === "bone" || pecas.acessorio === "chapeu",
-  };
-  let g = nova();
-  if (dir === "baixo") quadroFrente(g, ctx);
-  else if (dir === "cima") quadroCosta(g, ctx);
-  else {
-    quadroLado(g, ctx);
-    if (dir === "direita") g = espelhar(g);
-  }
-  if (!comContorno) return g;
-  contornar(g);
-  sombraNoChao(g);
-  return g;
-}
+import type { Altura, Direcao, Pecas, Preenchimento } from "@baguin/shared";
 
 /**
- * Spritesheet 72×128: 4 linhas (baixo, esquerda, direita, cima) × 3 colunas
- * (parado, passo A, passo B), quadros de FRAME_L×FRAME_A sem margem.
+ * Avatar cartoon vetorial, desenhado por código (`Path2D`) em duas tintas: papel e tinta. Referência de proporção
+ * e traço: docs/rascunhos/avatar.html. Tudo é desenhado em "unidades" (a tela do rascunho, 240 de largura); o mundo
+ * mostra `UNIDADE` unidades por px.
+ *
+ * O Avatar é uma marionete: o desenho (`montarAvatar`) é uma lista de partes ordenadas e a animação (`poseDe`) só
+ * move as partes. Quem pinta (`pintarAvatar` no canvas do DOM, `renderizarParte` para texturas do Phaser) não conhece
+ * as Peças.
  */
-export function renderizarSpritesheet(pecas: Pecas): HTMLCanvasElement {
-  const canvas = document.createElement("canvas");
-  canvas.width = FRAME_L * QUADROS_POR_DIRECAO;
-  canvas.height = FRAME_A * ORDEM_DIRECOES.length;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("canvas 2D indisponível");
-  ctx.imageSmoothingEnabled = false;
-  ORDEM_DIRECOES.forEach((dir, linha) => {
-    for (let frame = 0; frame < QUADROS_POR_DIRECAO; frame++) {
-      const g = desenharQuadro(pecas, dir, frame);
-      const ox = frame * FRAME_L;
-      const oy = linha * FRAME_A;
-      for (let y = 0; y < FRAME_A; y++) {
-        for (let x = 0; x < FRAME_L; x++) {
-          const c = g[y * FRAME_L + x];
-          if (!c) continue;
-          ctx.fillStyle = c;
-          ctx.fillRect(ox + x, oy + y, 1, 1);
-        }
-      }
+
+export const TINTA = "#000";
+export const PAPEL = "#FFF";
+/** Traço do rascunho (unidades). */
+const T = 7;
+/** Traço mais grosso no tamanho do mundo, para olheira e boca não sumirem (45% no rascunho). */
+export const ESPESSURA_MUNDO = 1.45;
+
+// ---------------------------------------------------------------- quadro
+
+/** Unidades de desenho por px lógico do mundo. */
+export const UNIDADE = 10;
+/** Retângulo do desenho (unidades): cabe cabelo alto, braços erguidos e a sombra. */
+export const QUADRO = { x0: -15, y0: -30, x1: 255, y1: 290 } as const;
+/** Tamanho lógico do quadro (px do mundo). */
+export const FRAME_L = (QUADRO.x1 - QUADRO.x0) / UNIDADE;
+export const FRAME_A = (QUADRO.y1 - QUADRO.y0) / UNIDADE;
+/** Onde o Avatar pisa (a sola), em unidades e em px do quadro a partir do topo. */
+export const SOLA = { x: 120, y: 272 } as const;
+export const SOLA_Y = (SOLA.y - QUADRO.y0) / UNIDADE;
+/** Topo do cabelo mais alto (altura "alto"), em px do quadro, para posicionar etiqueta e Balão. */
+export const TOPO_Y = (-10 - QUADRO.y0) / UNIDADE;
+
+// ---------------------------------------------------------------- vistas
+
+export type Vista = "frente" | "costas" | "lado";
+/** Direções do mundo, na ordem em que o editor as lista. */
+export const ORDEM_DIRECOES: readonly Direcao[] = ["baixo", "esquerda", "direita", "cima"];
+
+/** Baixo mostra a frente, cima as costas; esquerda e direita mostram o lado (a direita é a esquerda espelhada). */
+export function vistaDe(dir: Direcao): { vista: Vista; espelhar: boolean } {
+  if (dir === "baixo") return { vista: "frente", espelhar: false };
+  if (dir === "cima") return { vista: "costas", espelhar: false };
+  return { vista: "lado", espelhar: dir === "direita" };
+}
+
+// ---------------------------------------------------------------- geometria
+
+type Matriz = readonly [number, number, number, number, number, number];
+
+/** Uma forma: preenchimento e/ou traço. Só `PAPEL` e `TINTA` aparecem (exceto a sombra, que é tinta translúcida). */
+export type Op = {
+  /** Caminho SVG. */
+  d: string;
+  fill?: string;
+  /** Largura do traço (unidades, antes da espessura); sem valor, não tem traço. */
+  traco?: number;
+  cor?: string;
+  /** Recorte (caminho SVG) para estampas. */
+  clip?: string;
+  /** Matriz aplicada à geometria (não ao traço). */
+  m?: Matriz;
+  alfa?: number;
+};
+
+export type ParteId = "sombra" | "pernaA" | "pernaB" | "cabeloAtras" | "bracoA" | "bracoB" | "tronco" | "cabeca";
+type Caixa = { x0: number; y0: number; x1: number; y1: number };
+
+export type Parte = {
+  id: ParteId;
+  /** `superior` acompanha a respiração e o balanço do tronco (gira em torno do quadril). */
+  grupo: "chao" | "pernas" | "superior";
+  ops: Op[];
+  /** A Altura desce ou sobe a parte de cima (o quadril fica onde está). */
+  dy: number;
+  /** Retângulo que contém a parte (unidades, já com `dy`), para a textura. */
+  caixa: Caixa;
+  /** Eixo de giro (unidades, já com `dy`): topo da perna, ombro. */
+  pivo: { x: number; y: number };
+};
+
+export type Desenho = { vista: Vista; altura: Altura; quadril: { x: number; y: number }; partes: Parte[] };
+
+const rr = (x: number, y: number, w: number, h: number, r: number) =>
+  `M${x + r} ${y}H${x + w - r}A${r} ${r} 0 0 1 ${x + w} ${y + r}V${y + h - r}A${r} ${r} 0 0 1 ${x + w - r} ${y + h}H${x + r}A${r} ${r} 0 0 1 ${x} ${y + h - r}V${y + r}A${r} ${r} 0 0 1 ${x + r} ${y}Z`;
+const circ = (cx: number, cy: number, r: number) => `M${cx - r} ${cy}a${r} ${r} 0 1 0 ${2 * r} 0a${r} ${r} 0 1 0 ${-2 * r} 0Z`;
+const giro = (graus: number, cx: number, cy: number): Matriz => {
+  const a = (graus * Math.PI) / 180;
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  return [c, s, -s, c, cx - cx * c + cy * s, cy - cx * s - cy * c];
+};
+
+const forma = (d: string, fill?: string, traco = T, extra: Partial<Op> = {}): Op => ({ d, fill, traco, ...extra });
+/** Ponto cheio, sem traço. */
+const ponto = (x: number, y: number, r: number, fill = TINTA) => forma(circ(x, y, r), fill, 0);
+const linha = (d: string, traco: number) => forma(d, undefined, traco);
+
+const cor = (p: Preenchimento) => (p === "tinta" ? TINTA : PAPEL);
+
+// ---------------------------------------------------------------- cabelos
+
+type Cabelo = {
+  /** Silhueta atrás da cabeça. */
+  b?: string;
+  /** Linha da franja (a testa é coberta acima dela). */
+  f?: string;
+  /** Versão de baixo de boné e touca. */
+  u?: string;
+  /** Extra atrás da silhueta (coque). */
+  coque?: boolean;
+  /** Crista (moicano), sobre a cabeça. */
+  c?: string;
+  /** Cabeça só de cúpula (sem franja): careca e moicano. */
+  cupula?: boolean;
+  /** Altura do arco do fone. */
+  t: number;
+};
+
+const CABELOS: Record<Pecas["cabelo"]["estilo"], Cabelo> = {
+  espetado: {
+    b: "M50 149C29 128 29 89.5 46.5 68.5L29 54.5L57 54.5C71 33.5 95.5 23 116.5 26.5L123.5 9L137.5 28C165.5 26.5 190 40.5 200.5 65L221.5 58L207.5 82.5C218 107 211 135 193.5 152.5Z",
+    f: "M66 84L80 118L92 100L106 124L120 102L134 124L148 100L160 118L174 84",
+    u: "M62 84L38 78L50 98L34 110L54 118C52 134 56 144 62 152L178 152C184 144 188 134 186 118L206 110L190 98L202 78L178 84Z",
+    t: 16,
+  },
+  redondo: {
+    b: "M43 100a77 77 0 1 0 154 0a77 77 0 1 0 -154 0Z",
+    f: "M66 84Q120 132 174 84",
+    u: "M60 84C36 90 38 146 68 160L172 160C202 146 204 90 180 84Z",
+    t: 15,
+  },
+  longo: {
+    b: "M44 198C32 120 43 26 120 26C197 26 208 120 196 198Z",
+    f: "M66 84C92 128 150 116 174 84",
+    u: "M62 82C40 112 36 160 44 198L196 198C204 160 200 112 178 82Z",
+    t: 18,
+  },
+  chanel: {
+    b: "M46 168C32 104 48 28 120 28C192 28 208 104 194 168Z",
+    f: "M66 84V108H174V84",
+    u: "M62 82C40 104 38 142 46 168L194 168C202 142 200 104 178 82Z",
+    t: 20,
+  },
+  tigela: {
+    b: "M58 112C50 56 84 30 120 30C156 30 190 56 182 112Z",
+    f: "M66 84Q68 112 120 112Q172 112 174 84",
+    u: "M60 84C56 96 56 106 58 112L182 112C184 106 184 96 180 84Z",
+    t: 22,
+  },
+  coque: {
+    b: "M60 108C52 58 84 34 120 34C156 34 188 58 180 108Z",
+    f: "M66 84Q93 98 120 86Q147 98 174 84",
+    u: "M60 84C56 94 58 104 60 108L180 108C182 104 184 94 180 84Z",
+    coque: true,
+    t: 26,
+  },
+  moicano: { c: "M108 100C102 76 97 50 104 30C108 16 132 16 136 30C143 50 138 76 132 100Z", cupula: true, t: 38 },
+  careca: { cupula: true, t: 38 },
+};
+// Moicano visto de lado: a crista vira uma faixa que acompanha o topo da cabeça.
+const CRISTA_LADO = "M82 62C84 34 106 14 128 18C150 22 166 44 160 70C146 48 104 44 82 62Z";
+
+const CUPULA = "M66 86C60 150 85 184 120 184C155 184 180 150 174 86C174 60 152 44 120 44C88 44 66 60 66 86Z";
+const ROSTO_FORMA = "M66 84C60 150 85 184 120 184C155 184 180 150 174 84";
+const ORELHA_E = "M66 128C51 124 49 150 67 150";
+const ORELHA_D = "M174 128C189 124 191 150 173 150";
+
+// ---------------------------------------------------------------- rostos
+
+/** Olhos e boca separados: a Expressão (boca mexendo, dormindo, zíper) troca só o que muda. */
+export type Rosto = { olhos: Op[]; boca: Op[] };
+
+export const ROSTOS: Record<Pecas["rosto"], Rosto> = {
+  sono: {
+    olhos: [
+      linha("M90 138h20M130 138h20", 6),
+      forma("M93.5 138a6.5 6.5 0 0 0 13 0zM133.5 138a6.5 6.5 0 0 0 13 0z", TINTA, 2),
+      linha("M93 151q7 4 14 0M133 151q7 4 14 0", 3),
+    ],
+    boca: [linha("M107 165q6 -5 13 0q6 5 13 -2", 5)],
+  },
+  feliz: { olhos: [ponto(100, 139, 6), ponto(140, 139, 6)], boca: [linha("M105 160q15 13 30 0", 5)] },
+  bravo: {
+    olhos: [linha("M88 126l22 8M152 126l-22 8", 6), ponto(101, 144, 5), ponto(139, 144, 5)],
+    boca: [linha("M107 169q13 -9 26 0", 5)],
+  },
+  sorrisao: {
+    olhos: [linha("M90 143q10 -11 20 0M130 143q10 -11 20 0", 5)],
+    boca: [forma("M104 158h32q-4 18 -16 18q-12 0 -16 -18z", TINTA, 4)],
+  },
+  desconfiado: {
+    olhos: [linha("M90 137h20", 6), ponto(101, 144, 4), linha("M130 127q10 -7 20 0", 5), ponto(140, 140, 5.5)],
+    boca: [linha("M108 168l24 -5", 5)],
+  },
+  fofo: {
+    olhos: [ponto(99, 140, 9), ponto(141, 140, 9), ponto(96, 137, 3, PAPEL), ponto(138, 137, 3, PAPEL)],
+    boca: [linha("M113 162q7 7 14 0", 4)],
+  },
+};
+
+// O rosto de lado: encolhe e vai para a frente (esquerda) da cabeça.
+const ROSTO_LADO: Matriz = [0.8, 0, 0, 1, 2, 0];
+const comM = (ops: Op[], m: Matriz): Op[] => ops.map((o) => ({ ...o, m }));
+
+// ---------------------------------------------------------------- medidas por Altura
+
+/** `perna`: parte visível das pernas; `tronco`: altura do bloco. A cabeça não muda. */
+const ALTURAS: Record<Altura, { perna: number; tronco: number }> = {
+  baixo: { perna: 28, tronco: 54 },
+  medio: { perna: 36, tronco: 60 },
+  alto: { perna: 46, tronco: 66 },
+};
+
+/** Quanto a parte de cima sobe ou desce com a Altura (médio = 0). */
+export const deslocamentoDe = (altura: Altura) => SOLA.y - ALTURAS[altura].perna - ALTURAS[altura].tronco - 176;
+
+// ---------------------------------------------------------------- montagem
+
+const caixa = (x0: number, y0: number, x1: number, y1: number): Caixa => ({ x0, y0, x1, y1 });
+const em = (c: Caixa, dy: number): Caixa => ({ ...c, y0: c.y0 + dy, y1: c.y1 + dy });
+
+function estampa(p: Preenchimento, recorte: string): Op[] {
+  if (p === "listra") return [forma([189, 205, 221, 237].map((y) => `M86 ${y}h68v8h-68z`).join(""), TINTA, 0, { clip: recorte })];
+  if (p === "bolinha") {
+    const pontos = [[105, 192], [122, 192], [139, 192], [113, 207], [131, 207], [105, 222], [122, 222], [139, 222], [113, 237], [131, 237]];
+    return [forma(pontos.map(([x, y]) => circ(x, y, 4.5)).join(""), TINTA, 0, { clip: recorte })];
+  }
+  if (p === "xadrez") return [forma("M84 192H156M84 206H156M84 220H156M84 234H156M105 172V250M120 172V250M135 172V250", undefined, 3, { clip: recorte })];
+  return [];
+}
+
+function acessorio(pecas: Pecas, vista: Vista, ac: string): Op[] {
+  const ai = ac === TINTA ? PAPEL : TINTA;
+  const t = CABELOS[pecas.cabelo.estilo].t;
+  switch (pecas.acessorio) {
+    case "oculos": {
+      if (vista === "costas") return [];
+      const lentes = [forma(circ(100, 140, 15), undefined, 5), forma(circ(140, 140, 15), undefined, 5), linha("M115 138q5 -4 10 0", 5)];
+      if (vista === "lado") return [...comM(lentes, ROSTO_LADO), linha("M126 138L142 135", 5)];
+      return [...lentes, linha("M85 137L67 131M155 137L173 131", 5)];
     }
-  });
-  return canvas;
+    case "bone": {
+      const copa = forma("M64 80C60 40 92 20 120 20C148 20 180 40 176 80Z", ac);
+      const botao = forma(circ(120, 20, 5), ac, 5);
+      if (vista === "costas") return [copa, linha("M100 76q20 8 40 0", 4), botao];
+      if (vista === "lado") return [copa, forma("M70 84C46 74 22 78 14 92C26 104 54 104 74 98Z", ac), botao];
+      return [copa, forma("M56 80Q120 72 184 80Q182 102 120 104Q58 102 56 80Z", ac), botao];
+    }
+    case "fone": {
+      const claro = ac === PAPEL;
+      const lado = vista === "lado";
+      const arco = lado ? `M148 118C150 72 140 ${t} 122 ${t}` : `M53 132C46 70 78 ${t} 120 ${t}C162 ${t} 194 70 187 132`;
+      const fones = lado ? [rr(136, 114, 24, 42, 11)] : [rr(41, 114, 24, 42, 11), rr(175, 114, 24, 42, 11)];
+      // Sobre cabelo em tinta o arco vira um tubo claro com contorno.
+      const banda = claro ? [linha(arco, 13), forma(arco, undefined, 5, { cor: PAPEL })] : [linha(arco, 8)];
+      return [...banda, ...fones.map((d) => forma(d, ac))];
+    }
+    case "touca": {
+      const listras = forma("M80 82v12M100 82v12M120 82v12M140 82v12M160 82v12", undefined, 3, { cor: ai });
+      return [forma(circ(120, 16, 11), ac), forma("M62 90C58 40 90 22 120 22C150 22 182 40 178 90Z", ac), forma(rr(56, 76, 128, 24, 11), ac), listras];
+    }
+    default:
+      return [];
+  }
+}
+
+/** Monta o Avatar numa vista: partes na ordem de desenho, cada uma com suas formas. */
+export function montarAvatar(pecas: Pecas, vista: Vista, rosto: Rosto = ROSTOS[pecas.rosto]): Desenho {
+  const { perna, tronco: th } = ALTURAS[pecas.altura];
+  const lh = perna + 8;
+  const dy = deslocamentoDe(pecas.altura);
+  const quadril = { x: 120, y: SOLA.y - perna };
+  const h = CABELOS[pecas.cabelo.estilo];
+  const chapeu = pecas.acessorio === "bone" || pecas.acessorio === "touca";
+  const lado = vista === "lado";
+  const hc = cor(pecas.cabelo.preenchimento);
+  // Acessório é sempre o contrário do cabelo; sem cabelo (careca, moicano), tinta.
+  const ac = h.cupula ? TINTA : hc === TINTA ? PAPEL : TINTA;
+  const cc = cor(pecas.calca.preenchimento);
+  const rc = pecas.roupa.preenchimento === "tinta" ? TINTA : PAPEL;
+
+  const parte = (id: ParteId, grupo: Parte["grupo"], ops: Op[], c: Caixa, pivo = { x: quadril.x, y: quadril.y }): Parte => {
+    const d = grupo === "superior" ? dy : 0;
+    return { id, grupo, ops, dy: d, caixa: em(c, d), pivo: { x: pivo.x, y: pivo.y } };
+  };
+
+  // pernas: tubos arredondados, sem pé
+  const ly = SOLA.y - lh;
+  const xPerna = lado ? [104, 118] : [98, 124];
+  const perna_ = (id: "pernaA" | "pernaB", x: number) =>
+    parte(id, "pernas", [forma(rr(x, ly, 18, lh, 8), cc)], caixa(x - 9, ly - 9, x + 27, SOLA.y + 9), { x: x + 9, y: ly });
+
+  // braços: iguais às pernas, caem colados ao tronco, sempre papel
+  const braco = (id: "bracoA" | "bracoB", x: number, graus: number, px: number): Parte =>
+    parte(id, "superior", [forma(rr(x, 182, 18, lh, 8), PAPEL, T, { m: giro(graus, px, 184) })], caixa(x - 12, 170, x + 30, 182 + lh + 14), { x: px, y: 183 + dy });
+  const bracos = lado ? [braco("bracoA", 115, 0, 120), braco("bracoB", 111, 0, 120)] : [braco("bracoA", 74, 4, 83), braco("bracoB", 148, -4, 157)];
+
+  // tronco: bloco arredondado único com o Preenchimento da roupa
+  const bloco = lado ? rr(100, 176, 40, th, 18) : rr(90, 176, 60, th, 20);
+  const corpo = parte(
+    "tronco",
+    "superior",
+    [forma(bloco, rc, 0), ...estampa(pecas.roupa.preenchimento, bloco), forma(bloco)],
+    caixa(lado ? 92 : 82, 168, lado ? 148 : 158, 176 + th + 10),
+  );
+
+  // cabelo atrás do corpo
+  const bun = lado ? circ(150, 30, 17) : circ(120, 24, 17);
+  const atras: Op[] = h.cupula ? [] : chapeu ? [forma(h.u!, hc)] : [...(h.coque ? [forma(bun, hc)] : []), forma(h.b!, hc)];
+  const cabeloAtras = parte("cabeloAtras", "superior", atras, caixa(18, -12, 226, 208));
+
+  // cabeça: orelhas, cabeça, franja, rosto e acessório
+  const orelhas = [forma(ORELHA_E, PAPEL), forma(ORELHA_D, PAPEL)];
+  const orelhaLado = [forma("M140 142a8 11 0 1 0 16 0a8 11 0 1 0 -16 0Z", PAPEL), linha("M145 138q5 -2 6 4", 3)];
+  const crista = h.c && !chapeu ? [forma(lado ? CRISTA_LADO : h.c, hc)] : [];
+  const rostoOps = [...rosto.olhos, ...rosto.boca];
+  let cabeca: Op[];
+  if (vista === "costas") {
+    cabeca = h.cupula ? [...orelhas, forma(CUPULA, PAPEL), ...crista] : [...orelhas, forma(ROSTO_FORMA, hc)];
+  } else {
+    const craneo: Op[] = h.cupula
+      ? [forma(CUPULA, PAPEL), ...crista]
+      : [forma(ROSTO_FORMA, PAPEL), forma(`${h.f}L170 62L70 62Z`, hc, 0), linha(h.f!, T)];
+    cabeca = lado ? [...craneo, ...comM(rostoOps, ROSTO_LADO), ...orelhaLado] : [...orelhas, ...craneo, ...rostoOps];
+  }
+  cabeca.push(...acessorio(pecas, vista, ac));
+  const cabecaParte = parte("cabeca", "superior", cabeca, caixa(6, -14, 234, 196));
+
+  const sombra = parte("sombra", "chao", [forma(`M66 274a54 9 0 1 0 108 0a54 9 0 1 0 -108 0Z`, TINTA, 0, { alfa: 0.15 })], caixa(58, 262, 182, 288));
+
+  const a = perna_("pernaA", xPerna[0]);
+  const b = perna_("pernaB", xPerna[1]);
+  const [bA, bB] = bracos;
+  // De lado o braço de longe fica atrás do tronco e o de perto na frente; de frente e de costas os dois ficam atrás.
+  const partes = lado ? [sombra, a, b, cabeloAtras, bA, corpo, bB, cabecaParte] : [sombra, a, b, cabeloAtras, bA, bB, corpo, cabecaParte];
+  return { vista, altura: pecas.altura, quadril, partes };
+}
+
+// ---------------------------------------------------------------- marionete
+
+export type Movimento = "parado" | "andando" | "dancando";
+export type Transf = { dx: number; dy: number; rot: number };
+export type Pose = { superior: Transf; partes: Partial<Record<ParteId, Transf>> };
+
+const ZERO: Transf = { dx: 0, dy: 0, rot: 0 };
+const rad = (g: number) => (g * Math.PI) / 180;
+/** 0 → 1 → 0, cada subida ou descida levando `meio` ms (como `alternate` com ease-in-out). */
+const onda = (ms: number, meio: number) => (1 - Math.cos((Math.PI * ms) / meio)) / 2;
+
+/**
+ * Parado respira; andando alterna as pernas e balança os braços; dançando inclina o tronco e ergue os braços.
+ * De lado as pernas giram em torno do quadril e o braço de perto vai contra a perna de perto. `ms` é o relógio.
+ */
+export function poseDe(movimento: Movimento, ms: number, vista: Vista, reduzir = false): Pose {
+  const lado = vista === "lado";
+  if (movimento === "parado") return { superior: reduzir ? ZERO : { dx: 0, dy: -3 * onda(ms, 1600), rot: 0 }, partes: {} };
+  if (movimento === "andando") {
+    const u = onda(ms, 300);
+    const s = 2 * u - 1;
+    const bob = { dx: 0, dy: -3 * u, rot: 0 };
+    if (lado) {
+      const perna = (r: number): Transf => ({ dx: 0, dy: 0, rot: r });
+      return {
+        superior: bob,
+        partes: { pernaA: perna(0.5 * s), pernaB: perna(-0.5 * s), bracoA: perna(-0.5 * s), bracoB: perna(0.5 * s) },
+      };
+    }
+    const braco = rad(-9 + 18 * u);
+    return {
+      superior: bob,
+      partes: { pernaA: { dx: 0, dy: -7 * u, rot: 0 }, pernaB: { dx: 0, dy: -7 * (1 - u), rot: 0 }, bracoA: { dx: 0, dy: 0, rot: braco }, bracoB: { dx: 0, dy: 0, rot: -braco } },
+    };
+  }
+  const u = onda(ms, 420);
+  const erguido = rad(40 + 35 * u);
+  return {
+    superior: { dx: 0, dy: 0, rot: rad(-5 + 10 * u) },
+    partes: {
+      pernaA: { dx: 0, dy: -7 * u, rot: 0 },
+      pernaB: { dx: 0, dy: -7 * (1 - u), rot: 0 },
+      bracoA: { dx: 0, dy: 0, rot: erguido },
+      bracoB: { dx: 0, dy: 0, rot: lado ? erguido : -erguido },
+    },
+  };
+}
+
+// ---------------------------------------------------------------- pintura
+
+type Contexto = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
+
+function pintarOp(ctx: Contexto, op: Op, espessura: number) {
+  let p = new Path2D(op.d);
+  if (op.m) {
+    const t = new Path2D();
+    t.addPath(p, { a: op.m[0], b: op.m[1], c: op.m[2], d: op.m[3], e: op.m[4], f: op.m[5] });
+    p = t;
+  }
+  ctx.save();
+  if (op.clip) ctx.clip(new Path2D(op.clip));
+  if (op.alfa !== undefined) ctx.globalAlpha = op.alfa;
+  if (op.fill) {
+    ctx.fillStyle = op.fill;
+    ctx.fill(p);
+  }
+  if (op.traco) {
+    ctx.lineWidth = op.traco * espessura;
+    ctx.strokeStyle = op.cor ?? TINTA;
+    ctx.stroke(p);
+  }
+  ctx.restore();
+}
+
+/** Pinta uma parte (em unidades, sem pose). */
+export function pintarParte(ctx: Contexto, parte: Parte, espessura = 1) {
+  ctx.save();
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  ctx.translate(0, parte.dy);
+  for (const op of parte.ops) pintarOp(ctx, op, espessura);
+  ctx.restore();
+}
+
+function girar(ctx: Contexto, t: Transf, x: number, y: number) {
+  ctx.translate(x + t.dx, y + t.dy);
+  ctx.rotate(t.rot);
+  ctx.translate(-x, -y);
+}
+
+/** Pinta o Avatar inteiro, em unidades, na transformação atual do contexto. */
+export function pintarAvatar(ctx: Contexto, desenho: Desenho, pose: Pose, opcoes: { espessura?: number; espelhar?: boolean; sombra?: boolean } = {}) {
+  const { espessura = 1, espelhar = false, sombra = true } = opcoes;
+  ctx.save();
+  if (espelhar) {
+    ctx.translate(2 * SOLA.x, 0);
+    ctx.scale(-1, 1);
+  }
+  const q = desenho.quadril;
+  for (const p of desenho.partes) {
+    if (p.id === "sombra" && !sombra) continue;
+    ctx.save();
+    if (p.grupo === "superior") girar(ctx, pose.superior, q.x, q.y);
+    if (p.grupo !== "chao") girar(ctx, pose.partes[p.id] ?? ZERO, p.pivo.x, p.pivo.y);
+    pintarParte(ctx, p, espessura);
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+/** Textura de uma parte (para o Phaser): `pxPorUnidade` px de textura por unidade de desenho. */
+export function renderizarParte(parte: Parte, pxPorUnidade: number, espessura = 1): HTMLCanvasElement {
+  const { x0, y0, x1, y1 } = parte.caixa;
+  const c = document.createElement("canvas");
+  c.width = Math.ceil((x1 - x0) * pxPorUnidade);
+  c.height = Math.ceil((y1 - y0) * pxPorUnidade);
+  const ctx = c.getContext("2d");
+  if (!ctx) throw new Error("canvas 2d indisponível");
+  ctx.setTransform(pxPorUnidade, 0, 0, pxPorUnidade, -x0 * pxPorUnidade, -y0 * pxPorUnidade);
+  pintarParte(ctx, parte, espessura);
+  return c;
+}
+
+// ---------------------------------------------------------------- recortes (miniaturas)
+
+export type Corte = "corpo" | "cabeca" | "torso" | "pernas";
+
+/** Região do desenho (unidades) que cada miniatura mostra. A parte de cima acompanha a Altura. */
+export function regiaoDe(corte: Corte, altura: Altura = "medio"): Caixa {
+  const dy = deslocamentoDe(altura);
+  const { perna, tronco } = ALTURAS[altura];
+  if (corte === "cabeca") return caixa(20, 5 + dy, 220, 205 + dy);
+  if (corte === "torso") return caixa(62, 186 + dy, 178, 176 + dy + tronco + 10);
+  if (corte === "pernas") return caixa(76, SOLA.y - perna - 4, 164, SOLA.y + 6);
+  return caixa(QUADRO.x0, QUADRO.y0, QUADRO.x1, QUADRO.y1);
 }

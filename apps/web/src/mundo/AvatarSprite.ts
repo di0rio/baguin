@@ -1,15 +1,12 @@
 import { BALAO_MS, PES, type Direcao, type Pecas } from "@baguin/shared";
 import Phaser from "phaser";
-import { FRAME_A, FRAME_L, QUADROS_POR_DIRECAO, ORDEM_DIRECOES, quadro, renderizarSpritesheet } from "../avatar/renderizar";
+import { ESPESSURA_MUNDO, SOLA, SOLA_Y, TOPO_Y, UNIDADE, montarAvatar, poseDe, renderizarParte, vistaDe, type Desenho, type ParteId, type Vista } from "../avatar/renderizar";
 import type { StatusAvatar } from "./indicador";
 import { balao, etiquetaNome, soltarBalao, type Textura, type TexturaBalao } from "./rotulos";
 
-/** Ciclo de caminhada: parado, passo A, parado, passo B. */
-const CICLO = [0, 1, 0, 2];
-const MS_POR_QUADRO = 140;
 // O ponto (x, y) do Avatar é o centro do corpo; os pés (sola) ficam PES px abaixo, e é aí que ele pisa.
-/** Topo do sprite, relativo ao centro. */
-const TOPO = PES - FRAME_A;
+/** Topo da cabeça mais alta, relativo ao centro. */
+const TOPO = PES - SOLA_Y + TOPO_Y;
 /** A etiqueta de nome fica logo acima da cabeça; a pílula ocupa 18px dentro de uma textura de 22px. */
 const ETIQUETA_BASE = TOPO;
 const ETIQUETA_ALTURA_PILULA = 18;
@@ -23,30 +20,62 @@ const hash = (s: string) => {
   return (h >>> 0).toString(36);
 };
 
-/** Cria (uma vez) a textura do spritesheet das Peças e devolve a chave. */
-function garantirTextura(scene: Phaser.Scene, contaId: string, pecasJson: string): string {
-  const chave = `avatar:${contaId}:${hash(pecasJson)}`;
-  if (scene.textures.exists(chave)) return chave;
-  const tex = scene.textures.addCanvas(chave, renderizarSpritesheet(JSON.parse(pecasJson) as Pecas));
-  if (!tex) throw new Error("falha ao criar textura do Avatar");
-  for (let i = 0; i < ORDEM_DIRECOES.length * QUADROS_POR_DIRECAO; i++) {
-    tex.add(i, 0, (i % QUADROS_POR_DIRECAO) * FRAME_L, Math.floor(i / QUADROS_POR_DIRECAO) * FRAME_A, FRAME_L, FRAME_A);
+/** Px de textura por px lógico do mundo: dá para o zoom máximo (3) em tela 2x sem borrar. */
+const RES_TEXTURA = 6;
+
+type VistaMarionete = {
+  raiz: Phaser.GameObjects.Container;
+  superior: Phaser.GameObjects.Container;
+  /** Posição de repouso de cada parte (px, relativa ao pai), para somar a pose. */
+  partes: { img: Phaser.GameObjects.Image; id: ParteId; x: number; y: number }[];
+  base: { x: number; y: number };
+};
+
+/** Marionete de uma vista: uma textura por parte, em contêineres que o Phaser move e gira a cada quadro. */
+function montarVista(scene: Phaser.Scene, base: string, desenho: Desenho): VistaMarionete {
+  const q = desenho.quadril;
+  const raiz = scene.add.container(0, PES);
+  const superior = scene.add.container((q.x - SOLA.x) / UNIDADE, (q.y - SOLA.y) / UNIDADE);
+  const partes: VistaMarionete["partes"] = [];
+  let superiorNoLugar = false;
+  for (const parte of desenho.partes) {
+    const chave = `${base}:${desenho.vista}:${parte.id}`;
+    if (!scene.textures.exists(chave)) {
+      const tex = scene.textures.addCanvas(chave, renderizarParte(parte, RES_TEXTURA / UNIDADE, ESPESSURA_MUNDO));
+      tex?.setFilter(Phaser.Textures.FilterMode.LINEAR);
+    }
+    const { x0, y0, x1, y1 } = parte.caixa;
+    const pai = parte.grupo === "superior" ? q : SOLA;
+    const x = (parte.pivo.x - pai.x) / UNIDADE;
+    const y = (parte.pivo.y - pai.y) / UNIDADE;
+    const img = scene.add
+      .image(x, y, chave)
+      .setOrigin((parte.pivo.x - x0) / (x1 - x0), (parte.pivo.y - y0) / (y1 - y0))
+      .setScale(1 / RES_TEXTURA);
+    if (parte.grupo === "superior") {
+      if (!superiorNoLugar) raiz.add(superior);
+      superiorNoLugar = true;
+      superior.add(img);
+    } else {
+      raiz.add(img);
+    }
+    partes.push({ img, id: parte.id, x, y });
   }
-  return chave;
+  return { raiz, superior, partes, base: { x: superior.x, y: superior.y } };
 }
 
-/** Um Avatar no mundo: sprite (ordenado por y) e, por cima de tudo, etiqueta de nome + Balão. */
+/** Um Avatar no mundo: marionete (ordenada por y) e, por cima de tudo, etiqueta de nome + Balão. */
 export class AvatarSprite {
   private corpo: Phaser.GameObjects.Container;
   private topo: Phaser.GameObjects.Container;
-  private sprite: Phaser.GameObjects.Sprite;
   private etiqueta: Phaser.GameObjects.Image;
   private balaoImg: Phaser.GameObjects.Image | null = null;
   private balaoTween: Phaser.Tweens.Tween | null = null;
   private balaoTexto = "";
   private balaoChave = "";
   private pecasJson = "";
-  private chaveTextura = "";
+  private pecas: Pecas | null = null;
+  private vistas = new Map<Vista, VistaMarionete>();
   private balaoAte = 0;
   private icone = "";
   private status: StatusAvatar = "online";
@@ -63,8 +92,7 @@ export class AvatarSprite {
   ) {
     this.res = res;
     this.escala = escala;
-    this.sprite = scene.add.sprite(0, PES, "__DEFAULT").setOrigin(0.5, 1);
-    this.corpo = scene.add.container(0, 0, [this.sprite]);
+    this.corpo = scene.add.container(0, 0);
     this.etiqueta = scene.add.image(0, ETIQUETA_BASE, "__DEFAULT").setOrigin(0.5, 1);
     this.topo = scene.add.container(0, 0, [this.etiqueta]).setDepth(1e6);
     this.refazerEtiqueta();
@@ -72,21 +100,41 @@ export class AvatarSprite {
 
   definirPecas(pecasJson: string) {
     if (pecasJson === this.pecasJson) return;
+    this.limparVistas();
     this.pecasJson = pecasJson;
-    this.chaveTextura = garantirTextura(this.scene, this.contaId, pecasJson);
-    this.sprite.setTexture(this.chaveTextura, 0);
+    this.pecas = JSON.parse(pecasJson) as Pecas;
   }
 
   /** Posição em px do mundo do centro do corpo (os pés ficam `PES` abaixo). */
   atualizar(x: number, y: number, dir: Direcao, movendo: boolean, agora: number) {
-    if (!this.chaveTextura) return;
-    const rx = Math.round(x);
+    if (!this.pecas) return;
     const ry = Math.round(y);
-    const f = movendo ? CICLO[Math.floor(agora / MS_POR_QUADRO) % CICLO.length] : 0;
-    this.sprite.setFrame(quadro(dir, f));
-    this.corpo.setPosition(rx, ry).setDepth(ry + PES); // profundidade pela sola, como os Móveis (pela base)
-    this.topo.setPosition(rx, ry);
+    const { vista, espelhar } = vistaDe(dir);
+    let v = this.vistas.get(vista);
+    if (!v) {
+      v = montarVista(this.scene, `avatar:${this.contaId}:${hash(this.pecasJson)}`, montarAvatar(this.pecas, vista));
+      this.corpo.add(v.raiz);
+      this.vistas.set(vista, v);
+    }
+    for (const [k, o] of this.vistas) o.raiz.setVisible(k === vista);
+    v.raiz.setScale(espelhar ? -1 : 1, 1);
+    const pose = poseDe(movendo ? "andando" : "parado", agora, vista, reduzirMovimento());
+    v.superior.setPosition(v.base.x + pose.superior.dx / UNIDADE, v.base.y + pose.superior.dy / UNIDADE).setRotation(pose.superior.rot);
+    for (const p of v.partes) {
+      const t = pose.partes[p.id];
+      p.img.setPosition(p.x + (t?.dx ?? 0) / UNIDADE, p.y + (t?.dy ?? 0) / UNIDADE).setRotation(t?.rot ?? 0);
+    }
+    this.corpo.setPosition(x, y).setDepth(ry + PES); // profundidade pela sola, como os Móveis (pela base)
+    this.topo.setPosition(Math.round(x), ry);
     if (this.balaoAte && agora > this.balaoAte) this.esconderBalao();
+  }
+
+  /** Solta as vistas e as texturas das Peças anteriores. */
+  private limparVistas() {
+    for (const v of this.vistas.values()) v.raiz.destroy();
+    this.vistas.clear();
+    const prefixo = `avatar:${this.contaId}:${hash(this.pecasJson)}:`;
+    for (const k of this.scene.textures.getTextureKeys()) if (this.pecasJson && k.startsWith(prefixo)) this.scene.textures.remove(k);
   }
 
   /** Bolinha de status e Indicador de atividade (emoji, "" = nenhum) dentro da pílula do nome. */
@@ -188,6 +236,7 @@ export class AvatarSprite {
   destruir() {
     this.balaoTween?.stop();
     this.descartarBalao();
+    this.limparVistas();
     this.corpo.destroy();
     this.topo.destroy();
   }

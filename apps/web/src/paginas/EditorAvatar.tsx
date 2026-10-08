@@ -6,7 +6,7 @@ import { useNavigate, useSearchParams } from "react-router";
 import { api } from "../api";
 import { AvatarCanvas } from "../avatar/AvatarCanvas";
 import { aleatorio } from "../avatar/aleatorio";
-import { ORDEM_DIRECOES, PALETAS } from "../avatar/renderizar";
+import { ORDEM_DIRECOES, type Corte } from "../avatar/renderizar";
 import { caminhoSeguro } from "../auth";
 import { AvatarMini } from "../components/avatar-mini";
 import { CONTENEDOR, Pagina, Topo } from "../components/cabecalho";
@@ -19,22 +19,22 @@ import { cn } from "../lib/utils";
 import { useSessao } from "../sessao";
 
 const NOME_DIRECAO: Record<Direcao, string> = { baixo: "Frente", esquerda: "Esquerda", direita: "Direita", cima: "Costas" };
+const NOME_ALTURA: Record<string, string> = { baixo: "Baixo", medio: "Médio", alto: "Alto" };
 const NOME_CABELO: Record<string, string> = {
-  careca: "Careca",
-  curto: "Curto",
-  moicano: "Moicano",
+  espetado: "Espetado",
+  redondo: "Redondo",
   longo: "Longo",
-  rabo: "Rabo de cavalo",
-  blackpower: "Black power",
+  chanel: "Chanel",
+  tigela: "Tigela",
+  coque: "Coque",
+  moicano: "Moicano",
+  careca: "Careca",
 };
-const NOME_ROUPA: Record<string, string> = { camiseta: "Camiseta", moletom: "Moletom", regata: "Regata" };
-const NOME_ACESSORIO: Record<string, string> = {
-  nenhum: "Nenhum",
-  oculos: "Óculos",
-  bone: "Boné",
-  fone: "Fone",
-  chapeu: "Chapéu",
-};
+const NOME_ROSTO: Record<string, string> = { sono: "Sono", feliz: "Feliz", bravo: "Bravo", sorrisao: "Sorrisão", desconfiado: "Desconfiado", fofo: "Fofo" };
+const NOME_PREENCHIMENTO: Record<string, string> = { papel: "Papel", tinta: "Tinta", listra: "Listra", bolinha: "Bolinha", xadrez: "Xadrez" };
+const NOME_ACESSORIO: Record<string, string> = { nenhum: "Nenhum", oculos: "Óculos", bone: "Boné", fone: "Fone", touca: "Touca" };
+/** Escala (px de tela por px do mundo) da miniatura de cada recorte: a cabeça é grande, o torso e as pernas são faixas. */
+const ESCALA_MINI: Record<Corte, number> = { cabeca: 3, torso: 6, pernas: 6, corpo: 1.9 };
 
 /** Opção de um `RadioGroup` do cd/ui que vira tile, amostra ou aba: o `Radio` do cd é só a bolinha, então o corpo vem do primitivo. */
 function Opcao({ className, ...props }: RadioPrimitive.Root.Props) {
@@ -50,7 +50,7 @@ function Opcao({ className, ...props }: RadioPrimitive.Root.Props) {
   );
 }
 
-/** Seção de uma categoria: título, escolha atual à direita e o conteúdo (peças e cores). */
+/** Seção de uma categoria: título, escolha atual à direita e o conteúdo (formas e Preenchimentos). */
 function Grupo({ titulo, atual, children }: { titulo: string; atual?: string; children: ReactNode }) {
   const id = useId();
   return (
@@ -66,24 +66,7 @@ function Grupo({ titulo, atual, children }: { titulo: string; atual?: string; ch
   );
 }
 
-/** Amostras de cor: uma escolha só, com anel na cor ativa. */
-function Cores({ paleta, valor, onEscolher, rotulo }: { paleta: readonly string[]; valor: number; onEscolher: (i: number) => void; rotulo: string }) {
-  return (
-    <RadioGroup aria-label={rotulo} value={String(valor)} onValueChange={(v) => onEscolher(Number(v))} className="flex-row flex-wrap gap-2.5">
-      {paleta.map((cor, i) => (
-        <Opcao
-          key={i}
-          value={String(i)}
-          aria-label={`${rotulo} ${i + 1}`}
-          style={{ background: cor }}
-          className="size-8 rounded-full border border-black/10 ring-offset-2 ring-offset-card data-checked:ring-2 data-checked:ring-foreground dark:border-white/15"
-        />
-      ))}
-    </RadioGroup>
-  );
-}
-
-/** Peças com uma miniatura de cada uma, desenhada pelo renderizador com as peças atuais. */
+/** Formas e Preenchimentos, cada um com uma miniatura desenhada pelo renderizador com as Peças atuais. */
 function Estilos<T extends string>({
   opcoes,
   valor,
@@ -98,7 +81,7 @@ function Estilos<T extends string>({
   nomes: Record<string, string>;
   onEscolher: (v: T) => void;
   miniatura: (o: T) => Pecas;
-  corte: "cabeca" | "torso";
+  corte: Corte;
   rotulo: string;
 }) {
   return (
@@ -109,8 +92,8 @@ function Estilos<T extends string>({
           value={o}
           className="flex flex-col items-center justify-start gap-1.5 rounded-xl border bg-muted px-1 pt-2.5 pb-2 text-muted-foreground text-xs hover:bg-accent data-checked:border-foreground data-checked:bg-background data-checked:text-foreground data-checked:ring-1 data-checked:ring-foreground"
         >
-          <span className="grid h-14 place-items-center">
-            <AvatarMini pecas={miniatura(o)} escala={3} corte={corte} />
+          <span className="grid h-16 w-full place-items-center rounded-lg bg-[#f6f4ee]">
+            <AvatarMini pecas={miniatura(o)} escala={ESCALA_MINI[corte]} corte={corte} />
           </span>
           <span className="max-w-full text-balance text-center leading-tight">{nomes[o]}</span>
         </Opcao>
@@ -118,6 +101,8 @@ function Estilos<T extends string>({
     </RadioGroup>
   );
 }
+
+const PREENCHIMENTOS_ROUPA = [...CATALOGO.lisos, ...CATALOGO.estampas] as const;
 
 const calcularEscala = () => (window.innerWidth < 640 ? 5 : window.innerWidth < 1024 ? 8 : 10);
 
@@ -177,10 +162,9 @@ export function EditorAvatar() {
       <div className={cn(CONTENEDOR, "grid items-start gap-8 pt-8 pb-28 lg:grid-cols-[minmax(0,25rem)_minmax(0,1fr)] lg:gap-10 lg:pb-12")}>
         <div className="flex flex-col gap-4 max-lg:contents lg:sticky lg:top-24">
           <div className="overflow-hidden rounded-2xl border bg-card max-sm:sticky max-sm:top-[4.0625rem] max-sm:z-10 max-sm:flex">
-            <div className="relative isolate grid place-items-center overflow-hidden bg-muted px-4 pt-8 pb-6 max-sm:w-36 max-sm:shrink-0 max-sm:p-3 max-sm:pb-4">
+            <div className="relative isolate grid place-items-center overflow-hidden bg-[#f6f4ee] px-4 pt-8 pb-6 max-sm:w-36 max-sm:shrink-0 max-sm:p-3 max-sm:pb-4">
               <div className="relative">
-                <div aria-hidden className="absolute inset-x-[10%] -bottom-1 h-4 rounded-[50%] bg-foreground/15" />
-                <AvatarCanvas pecas={pecas} dir={dir} andando={andando} escala={escala} className="relative" />
+                <AvatarCanvas pecas={pecas} dir={dir} movimento={andando ? "andando" : "parado"} animado escala={escala} espessura={1} sombra className="relative" />
               </div>
             </div>
             <Separator className="max-sm:hidden" />
@@ -228,38 +212,73 @@ export function EditorAvatar() {
         </div>
 
         <div className="flex flex-col gap-7 rounded-2xl border bg-card p-5 sm:p-6">
-          <Grupo titulo="pele">
-            <Cores rotulo="Tom de pele" paleta={PALETAS.pele} valor={pecas.pele} onEscolher={(pele) => setPecas({ ...pecas, pele })} />
+          <Grupo titulo="altura" atual={NOME_ALTURA[pecas.altura]}>
+            <Estilos
+              rotulo="Altura"
+              opcoes={CATALOGO.alturas}
+              nomes={NOME_ALTURA}
+              valor={pecas.altura}
+              corte="corpo"
+              miniatura={(altura) => ({ ...pecas, altura })}
+              onEscolher={(altura) => setPecas({ ...pecas, altura })}
+            />
           </Grupo>
           <Separator />
           <Grupo titulo="cabelo" atual={NOME_CABELO[pecas.cabelo.estilo]}>
             <Estilos
               rotulo="Estilo de cabelo"
-              opcoes={CATALOGO.cabeloEstilos}
+              opcoes={CATALOGO.cabelos}
               nomes={NOME_CABELO}
               valor={pecas.cabelo.estilo}
               corte="cabeca"
               miniatura={(estilo) => ({ ...pecas, cabelo: { ...pecas.cabelo, estilo } })}
               onEscolher={(estilo) => setPecas({ ...pecas, cabelo: { ...pecas.cabelo, estilo } })}
             />
-            <Cores rotulo="Cor do cabelo" paleta={PALETAS.cabelo} valor={pecas.cabelo.cor} onEscolher={(cor) => setPecas({ ...pecas, cabelo: { ...pecas.cabelo, cor } })} />
-          </Grupo>
-          <Separator />
-          <Grupo titulo="roupa" atual={NOME_ROUPA[pecas.roupa.estilo]}>
             <Estilos
-              rotulo="Estilo de roupa"
-              opcoes={CATALOGO.roupaEstilos}
-              nomes={NOME_ROUPA}
-              valor={pecas.roupa.estilo}
-              corte="torso"
-              miniatura={(estilo) => ({ ...pecas, roupa: { ...pecas.roupa, estilo } })}
-              onEscolher={(estilo) => setPecas({ ...pecas, roupa: { ...pecas.roupa, estilo } })}
+              rotulo="Preenchimento do cabelo"
+              opcoes={CATALOGO.lisos}
+              nomes={NOME_PREENCHIMENTO}
+              valor={pecas.cabelo.preenchimento}
+              corte="cabeca"
+              miniatura={(preenchimento) => ({ ...pecas, cabelo: { ...pecas.cabelo, preenchimento } })}
+              onEscolher={(preenchimento) => setPecas({ ...pecas, cabelo: { ...pecas.cabelo, preenchimento } })}
             />
-            <Cores rotulo="Cor da roupa" paleta={PALETAS.roupa} valor={pecas.roupa.cor} onEscolher={(cor) => setPecas({ ...pecas, roupa: { ...pecas.roupa, cor } })} />
           </Grupo>
           <Separator />
-          <Grupo titulo="calça">
-            <Cores rotulo="Cor da calça" paleta={PALETAS.calca} valor={pecas.calca} onEscolher={(calca) => setPecas({ ...pecas, calca })} />
+          <Grupo titulo="rosto" atual={NOME_ROSTO[pecas.rosto]}>
+            <Estilos
+              rotulo="Rosto"
+              opcoes={CATALOGO.rostos}
+              nomes={NOME_ROSTO}
+              valor={pecas.rosto}
+              corte="cabeca"
+              miniatura={(rosto) => ({ ...pecas, rosto })}
+              onEscolher={(rosto) => setPecas({ ...pecas, rosto })}
+            />
+          </Grupo>
+          <Separator />
+          <Grupo titulo="roupa" atual={NOME_PREENCHIMENTO[pecas.roupa.preenchimento]}>
+            <Estilos
+              rotulo="Preenchimento da roupa"
+              opcoes={PREENCHIMENTOS_ROUPA}
+              nomes={NOME_PREENCHIMENTO}
+              valor={pecas.roupa.preenchimento}
+              corte="torso"
+              miniatura={(preenchimento) => ({ ...pecas, roupa: { preenchimento } })}
+              onEscolher={(preenchimento) => setPecas({ ...pecas, roupa: { preenchimento } })}
+            />
+          </Grupo>
+          <Separator />
+          <Grupo titulo="calça" atual={NOME_PREENCHIMENTO[pecas.calca.preenchimento]}>
+            <Estilos
+              rotulo="Preenchimento da calça"
+              opcoes={CATALOGO.lisos}
+              nomes={NOME_PREENCHIMENTO}
+              valor={pecas.calca.preenchimento}
+              corte="pernas"
+              miniatura={(preenchimento) => ({ ...pecas, calca: { preenchimento } })}
+              onEscolher={(preenchimento) => setPecas({ ...pecas, calca: { preenchimento } })}
+            />
           </Grupo>
           <Separator />
           <Grupo titulo="acessório" atual={NOME_ACESSORIO[pecas.acessorio]}>

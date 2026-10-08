@@ -3,6 +3,7 @@ import {
   TEMPLATES,
   TEMPLATES_LUGAR,
   centroTile,
+  migrarPecas,
   pecasSchema,
   type ConfigDto,
   type ConviteDto,
@@ -161,7 +162,7 @@ export function montarApi(app: Application) {
     "/eu",
     logado(async (req, res) => {
       const [a] = await db.select().from(avatar).where(eq(avatar.contaId, req.conta.id));
-      const dto: EuDto = { conta: req.conta, avatar: a?.pecas ?? null };
+      const dto: EuDto = { conta: req.conta, avatar: a ? migrarPecas(a.pecas) : null };
       res.json(dto);
     }),
   );

@@ -31,11 +31,11 @@ O boneco 2D em cartoon (cabeçudo, traço grosso, só tinta e papel) que represe
 _Avoid_: Personagem, boneco, skin, sprite
 
 **Peça**:
-Uma camada visual que compõe o Avatar — corpo, rosto, cabelo, roupa, acessório. Cada Peça tem uma forma e um Preenchimento. Um Avatar é uma combinação de Peças.
+Uma camada visual que compõe o Avatar — rosto, cabelo, roupa, calça, acessório. Cada Peça tem uma forma e um Preenchimento. Um Avatar é uma combinação de Peças.
 _Avoid_: Item, cosmético, camada
 
 **Preenchimento**:
-Como uma Peça é pintada: papel (branco), tinta (preto) ou uma estampa feita das duas (listra, bolinha). O rosto é sempre papel.
+Como uma Peça é pintada: papel (branco), tinta (preto) ou uma estampa feita das duas (listra, bolinha, xadrez). O rosto é sempre papel.
 _Avoid_: Cor, paleta, textura
 
 **Expressão**:

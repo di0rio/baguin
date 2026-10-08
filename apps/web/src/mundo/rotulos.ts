@@ -1,10 +1,12 @@
 import Phaser from "phaser";
 import type { StatusAvatar } from "./indicador";
-import { hashTexto } from "./pixel";
+import { MUNDO } from "./paleta";
+import { hashTexto } from "./traco";
 
 /**
- * Textos do mundo (etiquetas de nome, Balões, rótulos de Zona e de porta) desenhados em canvas com
- * Ubuntu, em resolução alta e filtro linear: ficam nítidos com o zoom inteiro da câmera e sem serrilhado.
+ * Textos do mundo (etiquetas de nome, Balões, rótulos de Zona e de porta) desenhados em canvas com Ubuntu,
+ * em adesivo (papel com contorno de tinta, sem pílula translúcida, sem sombra suave, sem blur) e em resolução
+ * alta com filtro linear: nítidos com zoom não inteiro. Não seguem o tema da interface, só a paleta do mundo.
  */
 
 export const FONTE = 'Ubuntu, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
@@ -24,8 +26,11 @@ export function fontesProntas(): Promise<void> {
     .catch(() => undefined);
 }
 
-/** Fator de supersampling do texto: cobre o zoom da câmera e a densidade da tela. */
-export const resolucaoTexto = (zoom: number) => Math.min(6, Math.max(2, Math.ceil(zoom * (window.devicePixelRatio || 1))));
+/** Densidade de pixels da tela, limitada para não pedir um canvas gigante. */
+export const densidade = () => Math.min(3, Math.max(1, window.devicePixelRatio || 1));
+
+/** Fator de supersampling do texto: cobre o zoom da câmera (em px de CSS) e a densidade da tela. */
+export const resolucaoTexto = (zoom: number, dens = densidade()) => Math.min(6, Math.max(2, Math.ceil(zoom * dens)));
 
 /** Escala do texto no mundo: mantém etiquetas, Balões e rótulos com tamanho de tela estável (~13px) em qualquer zoom. */
 export const escalaTexto = (zoom: number) => Math.min(1, 1.3 / zoom);
@@ -78,9 +83,30 @@ function truncar(texto: string, max: number, peso: number, px: number): string {
 
 // ---------------------------------------------------------------- etiqueta de nome
 
-const COR_STATUS: Record<StatusAvatar, string> = { online: "#2FB67C", ausente: "#F5A524", naoPerturbe: "#E5484D" };
+/** Contorno dos adesivos do mundo (a HUD usa 1,5 px). */
+const CONTORNO = 1.5;
 
-/** Pílula escura translúcida: bolinha de status, nome (Ubuntu 700) e, se houver, o Indicador de atividade. */
+/** Marca de status em traço de tinta: online é bolinha cheia, ausente é anel vazio, Não perturbe é anel riscado. */
+function marcaStatus(ctx: CanvasRenderingContext2D, status: StatusAvatar, cx: number, cy: number) {
+  ctx.strokeStyle = MUNDO.tinta;
+  ctx.fillStyle = MUNDO.tinta;
+  ctx.lineWidth = 1.25;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 3.25, 0, Math.PI * 2);
+  if (status === "online") {
+    ctx.fill();
+    return;
+  }
+  ctx.stroke();
+  if (status === "naoPerturbe") {
+    ctx.beginPath();
+    ctx.moveTo(cx - 1.75, cy);
+    ctx.lineTo(cx + 1.75, cy);
+    ctx.stroke();
+  }
+}
+
+/** Adesivo de papel com contorno de tinta: marca de status, nome (Ubuntu 700) e, se houver, o Indicador de atividade. */
 export function etiquetaNome(
   scene: Phaser.Scene,
   { nome, status, icone, ehEu, res }: { nome: string; status: StatusAvatar; icone: string; ehEu: boolean; res: number },
@@ -94,32 +120,19 @@ export function etiquetaNome(
   const chave = `etq:${hashTexto(`${texto}|${status}|${icone}|${ehEu}`).toString(36)}:${res}`;
   return registrar(scene, chave, W + 4, H + 4, res, (ctx) => {
     ctx.translate(2, 2);
-    ctx.shadowColor = "rgba(20,20,40,0.28)";
-    ctx.shadowBlur = 3;
-    ctx.shadowOffsetY = 1;
-    ctx.fillStyle = "rgba(28,30,44,0.82)";
-    caminhoRedondo(ctx, 0, 0, W, H, H / 2);
+    const k = ehEu ? CONTORNO + 0.5 : CONTORNO;
+    ctx.fillStyle = MUNDO.papel;
+    ctx.strokeStyle = MUNDO.tinta;
+    ctx.lineWidth = k;
+    caminhoRedondo(ctx, k / 2, k / 2, W - k, H - k, (H - k) / 2);
     ctx.fill();
-    ctx.shadowColor = "transparent";
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = ehEu ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.1)";
-    caminhoRedondo(ctx, 0.5, 0.5, W - 1, H - 1, (H - 1) / 2);
     ctx.stroke();
-    // bolinha de status
-    ctx.fillStyle = COR_STATUS[status];
-    ctx.beginPath();
-    ctx.arc(11, H / 2, 3.25, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = "rgba(255,255,255,0.35)";
-    ctx.lineWidth = 0.75;
-    ctx.stroke();
-    // nome
+    marcaStatus(ctx, status, 11, H / 2);
     fonte(ctx, 700, PX);
-    ctx.fillStyle = "#FFFFFF";
+    ctx.fillStyle = MUNDO.tinta;
     ctx.fillText(texto, 19, H / 2 + 3.9);
     if (icone) {
       ctx.font = `10px ${FONTE_EMOJI}`;
-      ctx.fillStyle = "#FFFFFF";
       ctx.fillText(icone, 19 + larguraTexto + 4, H / 2 + 3.6);
     }
   });
@@ -171,78 +184,74 @@ function quebrar(texto: string, max: number, peso: number, px: number): string[]
   return linhas.slice(0, 8);
 }
 
-/** Bolha branca com cauda e sombra suave, texto Ubuntu 500 `#292D4C`, largura máxima ~200px. */
+/** Balão em adesivo: papel com contorno de tinta e cauda, texto Ubuntu 500 em tinta, largura máxima ~200px. Sem sombra. */
 export function balao(scene: Phaser.Scene, texto: string, res: number): TexturaBalao {
   const PX = 12;
   const LINHA = 16;
   const PAD_X = 10;
   const PAD_Y = 7;
-  const SOMBRA = 10;
+  const MARGEM = 3; // espaço para o contorno
   const CAUDA = 6;
   const linhas = quebrar(texto, 200 - PAD_X * 2, 500, PX);
   const m = medidor(500, PX);
   const larguraTexto = Math.max(...linhas.map((l) => m.measureText(l).width));
   const bw = Math.max(28, Math.ceil(larguraTexto + PAD_X * 2));
   const bh = linhas.length * LINHA + PAD_Y * 2 - 2;
-  const W = bw + SOMBRA * 2;
-  const H = bh + CAUDA + SOMBRA * 2;
+  const W = bw + MARGEM * 2;
+  const H = bh + CAUDA + MARGEM * 2;
   const chave = `bal:${hashTexto(texto).toString(36)}:${res}`;
   const tex = registrar(scene, chave, W, H, res, (ctx) => {
-    ctx.translate(SOMBRA, SOMBRA);
-    const corpo = () => {
-      caminhoRedondo(ctx, 0, 0, bw, bh, 12);
-      ctx.moveTo(bw / 2 - 6, bh - 0.5);
-      ctx.lineTo(bw / 2, bh + CAUDA);
-      ctx.lineTo(bw / 2 + 6, bh - 0.5);
-      ctx.closePath();
-    };
-    ctx.shadowColor = "rgba(41,45,76,0.24)";
-    ctx.shadowBlur = 7;
-    ctx.shadowOffsetY = 2;
-    ctx.fillStyle = "#FFFFFF";
-    corpo();
+    ctx.translate(MARGEM, MARGEM);
+    ctx.lineJoin = "round";
+    ctx.lineWidth = CONTORNO;
+    ctx.strokeStyle = MUNDO.tinta;
+    ctx.fillStyle = MUNDO.papel;
+    // corpo e cauda num caminho só, para o contorno não cortar a emenda
+    const r = 12;
+    ctx.beginPath();
+    ctx.moveTo(r, 0);
+    ctx.arcTo(bw, 0, bw, r, r);
+    ctx.arcTo(bw, bh, bw - r, bh, r);
+    ctx.lineTo(bw / 2 + 6, bh);
+    ctx.lineTo(bw / 2, bh + CAUDA);
+    ctx.lineTo(bw / 2 - 6, bh);
+    ctx.arcTo(0, bh, 0, bh - r, r);
+    ctx.arcTo(0, 0, r, 0, r);
+    ctx.closePath();
     ctx.fill();
-    ctx.shadowColor = "transparent";
-    ctx.fillStyle = "#FFFFFF";
-    corpo();
-    ctx.fill();
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = "rgba(41,45,76,0.07)";
-    corpo();
     ctx.stroke();
     fonte(ctx, 500, PX);
-    ctx.fillStyle = "#292D4C";
+    ctx.fillStyle = MUNDO.tinta;
     linhas.forEach((l, i) => ctx.fillText(l, PAD_X, PAD_Y + 11 + i * LINHA - 1));
   });
   usoBalao.set(chave, (usoBalao.get(chave) ?? 0) + 1);
-  return { ...tex, origemY: H - SOMBRA };
+  return { ...tex, origemY: H - MARGEM };
 }
 
 // ---------------------------------------------------------------- rótulos no chão
 
-/** Pílula translúcida clara (Zona, porta): sobre o chão do mapa. */
-export function pilulaClara(scene: Phaser.Scene, texto: string, res: number, opcoes: { forte?: boolean } = {}): Textura {
+/**
+ * Adesivo pequeno (Zona, porta) sobre o chão do mapa: papel com contorno de tinta. A Zona onde você está
+ * (`ativa`) ganha o amarelo, uma das quatro ocasiões da regra do tema. `forte` é o rótulo de porta (contorno maior).
+ */
+export function adesivo(scene: Phaser.Scene, texto: string, res: number, opcoes: { forte?: boolean; ativa?: boolean } = {}): Textura {
   const PX = 10;
   const H = 16;
   const t = truncar(texto, 160, 700, PX);
   const tw = medidor(700, PX).measureText(t).width;
   const W = Math.ceil(tw + 16);
-  const chave = `pil:${hashTexto(`${t}|${opcoes.forte}`).toString(36)}:${res}`;
+  const chave = `pil:${hashTexto(`${t}|${opcoes.forte}|${opcoes.ativa}`).toString(36)}:${res}`;
   return registrar(scene, chave, W + 4, H + 4, res, (ctx) => {
     ctx.translate(2, 2);
-    ctx.shadowColor = "rgba(41,45,76,0.14)";
-    ctx.shadowBlur = 3;
-    ctx.shadowOffsetY = 1;
-    ctx.fillStyle = opcoes.forte ? "rgba(255,255,255,0.88)" : "rgba(255,255,255,0.68)";
-    caminhoRedondo(ctx, 0, 0, W, H, H / 2);
+    const k = opcoes.forte ? CONTORNO : 1.25;
+    ctx.fillStyle = opcoes.ativa ? MUNDO.amarelo : MUNDO.papel;
+    ctx.strokeStyle = MUNDO.tinta;
+    ctx.lineWidth = k;
+    caminhoRedondo(ctx, k / 2, k / 2, W - k, H - k, (H - k) / 2);
     ctx.fill();
-    ctx.shadowColor = "transparent";
-    ctx.strokeStyle = "rgba(255,255,255,0.85)";
-    ctx.lineWidth = 1;
-    caminhoRedondo(ctx, 0.5, 0.5, W - 1, H - 1, (H - 1) / 2);
     ctx.stroke();
     fonte(ctx, 700, PX);
-    ctx.fillStyle = "#4B4F73";
+    ctx.fillStyle = MUNDO.tinta;
     ctx.fillText(t, 8, H / 2 + 3.4);
   });
 }

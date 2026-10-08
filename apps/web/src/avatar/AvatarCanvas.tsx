@@ -1,56 +1,64 @@
 import type { Direcao, Pecas } from "@baguin/shared";
 import { useEffect, useMemo, useRef } from "react";
-import { FRAME_A, FRAME_L, ORDEM_DIRECOES, renderizarSpritesheet } from "./renderizar";
-
-// parado, passo A, parado, passo B
-const CICLO = [0, 1, 0, 2];
+import { ESPESSURA_MUNDO, UNIDADE, montarAvatar, pintarAvatar, poseDe, regiaoDe, vistaDe, type Corte, type Movimento } from "./renderizar";
 
 type Props = {
   pecas: Pecas;
   dir?: Direcao;
-  andando?: boolean;
-  /** coluna fixa (0 parado, 1/2 passos) quando não está andando */
-  quadro?: number;
-  /** escala inteira: cada pixel lógico vira `escala` pixels de tela */
+  movimento?: Movimento;
+  /** Anima (respira parado, caminha, dança). Sem isto, mostra a pose inicial. */
+  animado?: boolean;
+  /** Px de tela por px lógico do mundo: o Avatar inteiro tem 27 × 32 px lógicos. */
   escala?: number;
+  /** Região mostrada; padrão, o Avatar inteiro. */
+  corte?: Corte;
+  espessura?: number;
+  /** Sombra no chão (só faz sentido no corpo inteiro). */
+  sombra?: boolean;
   className?: string;
 };
 
-/** Mostra um quadro do spritesheet do Avatar, com caminhada opcional. */
-export function AvatarCanvas({ pecas, dir = "baixo", andando = false, quadro = 0, escala = 4, className }: Props) {
+const reduzirMovimento = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/** Desenha o Avatar vetorial num canvas nítido (sem pixelar) do tamanho pedido. */
+export function AvatarCanvas({ pecas, dir = "baixo", movimento = "parado", animado = false, escala = 4, corte = "corpo", espessura = ESPESSURA_MUNDO, sombra = false, className }: Props) {
   const ref = useRef<HTMLCanvasElement>(null);
   const chave = JSON.stringify(pecas);
+  const { vista, espelhar } = vistaDe(dir);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const sheet = useMemo(() => renderizarSpritesheet(pecas), [chave]);
+  const desenho = useMemo(() => montarAvatar(pecas, vista), [chave, vista]);
+  const regiao = regiaoDe(corte, pecas.altura);
+  const largura = ((regiao.x1 - regiao.x0) / UNIDADE) * escala;
+  const altura = ((regiao.y1 - regiao.y0) / UNIDADE) * escala;
 
   useEffect(() => {
-    const ctx = ref.current?.getContext("2d");
-    if (!ctx) return;
-    ctx.imageSmoothingEnabled = false;
-    const linha = ORDEM_DIRECOES.indexOf(dir);
-    let passo = 0;
-    const desenhar = () => {
-      const col = andando ? CICLO[passo % CICLO.length] : quadro;
-      ctx.clearRect(0, 0, FRAME_L, FRAME_A);
-      ctx.drawImage(sheet, col * FRAME_L, linha * FRAME_A, FRAME_L, FRAME_A, 0, 0, FRAME_L, FRAME_A);
+    const canvas = ref.current;
+    const ctx = canvas?.getContext("2d");
+    if (!canvas || !ctx) return;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.ceil(largura * dpr);
+    canvas.height = Math.ceil(altura * dpr);
+    const k = (escala / UNIDADE) * dpr;
+    const reduzir = reduzirMovimento();
+    let id = 0;
+    const desenhar = (ms: number) => {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.setTransform(k, 0, 0, k, -regiao.x0 * k, -regiao.y0 * k);
+      pintarAvatar(ctx, desenho, poseDe(movimento, ms, vista, reduzir), { espessura, espelhar, sombra });
     };
-    desenhar();
-    if (!andando) return;
-    const id = setInterval(() => {
-      passo++;
-      desenhar();
-    }, 160);
-    return () => clearInterval(id);
-  }, [sheet, dir, andando, quadro]);
+    if (animado) {
+      const inicio = performance.now();
+      const quadro = (agora: number) => {
+        desenhar(agora - inicio);
+        id = requestAnimationFrame(quadro);
+      };
+      id = requestAnimationFrame(quadro);
+    } else {
+      desenhar(0);
+    }
+    return () => cancelAnimationFrame(id);
+  }, [desenho, vista, espelhar, movimento, animado, escala, espessura, sombra, largura, altura, regiao.x0, regiao.y0]);
 
-  return (
-    <canvas
-      ref={ref}
-      width={FRAME_L}
-      height={FRAME_A}
-      className={`pixelado ${className ?? ""}`}
-      style={{ width: FRAME_L * escala, height: FRAME_A * escala }}
-      aria-hidden
-    />
-  );
+  return <canvas ref={ref} className={className} style={{ width: largura, height: altura, imageRendering: "auto" }} aria-hidden />;
 }

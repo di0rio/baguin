@@ -12,6 +12,7 @@ import {
   centroTile,
   chaveBloqueio,
   podemSeOuvir,
+  migrarPecas,
   portaEm,
   type Ambiente,
   type BalaoReceberMsg,
@@ -99,12 +100,13 @@ export class LugarRoom extends Room<{ state: LugarEstado }> {
     if (!l) throw new Error("Lugar inexistente");
     const [u] = await db.select({ nome: user.name }).from(user).where(eq(user.id, ing.contaId));
     const [a] = await db.select({ pecas: avatar.pecas }).from(avatar).where(eq(avatar.contaId, ing.contaId));
-    if (!u || !a) throw new Error("Conta sem Avatar");
+    const pecas = a && migrarPecas(a.pecas);
+    if (!u || !pecas) throw new Error("Conta sem Avatar");
 
     return {
       ...ing,
       nome: u.nome.slice(0, NOME_MAX),
-      pecas: JSON.stringify(a.pecas),
+      pecas: JSON.stringify(pecas),
       silenciadoAte: m.silenciadoAte?.getTime() ?? 0,
     };
   }

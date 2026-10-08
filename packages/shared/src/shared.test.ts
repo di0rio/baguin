@@ -12,6 +12,7 @@ import {
   bloqueado,
   centroTile,
   chaveBloqueio,
+  migrarPecas,
   mover,
   movelSolido,
   pecasSchema,
@@ -314,9 +315,45 @@ describe("conversa", () => {
 describe("Pecas", () => {
   it("aceita o padrão e rejeita fora do catálogo", () => {
     expect(pecasSchema.safeParse(PECAS_PADRAO).success).toBe(true);
-    expect(pecasSchema.safeParse({ ...PECAS_PADRAO, pele: 6 }).success).toBe(false);
+    expect(pecasSchema.safeParse({ ...PECAS_PADRAO, altura: "gigante" }).success).toBe(false);
     expect(pecasSchema.safeParse({ ...PECAS_PADRAO, acessorio: "coroa" }).success).toBe(false);
-    expect(pecasSchema.safeParse({ ...PECAS_PADRAO, cabelo: { estilo: "curto", cor: 8 } }).success).toBe(false);
+    expect(pecasSchema.safeParse({ ...PECAS_PADRAO, rosto: "morto" }).success).toBe(false);
+    expect(pecasSchema.safeParse({ ...PECAS_PADRAO, cabelo: { estilo: "careca", preenchimento: "listra" } }).success).toBe(false);
+    expect(pecasSchema.safeParse({ ...PECAS_PADRAO, calca: { preenchimento: "xadrez" } }).success).toBe(false);
+    expect(pecasSchema.safeParse({ ...PECAS_PADRAO, roupa: { preenchimento: "xadrez" } }).success).toBe(true);
     expect(pecasSchema.safeParse({ pele: 1 }).success).toBe(false);
+  });
+
+  it("migra o formato antigo (índices de cor) de forma determinística", () => {
+    const antigo = { pele: 3, cabelo: { estilo: "rabo", cor: 3 }, roupa: { estilo: "moletom", cor: 8 }, calca: 4, acessorio: "chapeu" };
+    const novo = migrarPecas(antigo);
+    expect(novo).toEqual({
+      altura: "medio",
+      cabelo: { estilo: "coque", preenchimento: "papel" },
+      roupa: { preenchimento: "papel" },
+      calca: { preenchimento: "papel" },
+      rosto: "sono",
+      acessorio: "touca",
+    });
+    expect(migrarPecas(antigo)).toEqual(novo);
+    expect(pecasSchema.safeParse(novo).success).toBe(true);
+  });
+
+  it("todo Avatar antigo possível vira Peças válidas", () => {
+    const estilos = ["careca", "curto", "moicano", "longo", "rabo", "blackpower"];
+    const acessorios = ["nenhum", "oculos", "bone", "fone", "chapeu"];
+    for (const estilo of estilos)
+      for (const acessorio of acessorios)
+        for (let cor = 0; cor < 10; cor++) {
+          const antigo = { pele: cor % 6, cabelo: { estilo, cor: cor % 8 }, roupa: { estilo: "camiseta", cor }, calca: cor % 8, acessorio };
+          expect(pecasSchema.safeParse(migrarPecas(antigo)).success).toBe(true);
+        }
+  });
+
+  it("mantém o formato atual e recusa lixo", () => {
+    expect(migrarPecas(PECAS_PADRAO)).toBe(PECAS_PADRAO);
+    expect(migrarPecas(null)).toBeNull();
+    expect(migrarPecas({ pele: 1 })).toBeNull();
+    expect(migrarPecas({ pele: 9, cabelo: { estilo: "curto", cor: 99 }, roupa: { estilo: "camiseta", cor: 0 }, calca: 0, acessorio: "nenhum" })).toBeNull();
   });
 });
